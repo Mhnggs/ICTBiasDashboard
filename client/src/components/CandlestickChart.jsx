@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { createChart } from 'lightweight-charts';
+import { createChart, CandlestickSeries } from 'lightweight-charts';
 
 function toTimestamp(datetime) {
-  // datetime format: "2025-01-15 08:00:00"
   return Math.floor(new Date(datetime.replace(' ', 'T') + '-05:00').getTime() / 1000);
 }
 
@@ -40,7 +39,7 @@ export default function CandlestickChart({ candles, levels, orderBlocks, fvgs })
 
     chartRef.current = chart;
 
-    const candleSeries = chart.addCandlestickSeries({
+    const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#22c55e',
       downColor: '#ef4444',
       borderDownColor: '#ef4444',
@@ -58,7 +57,6 @@ export default function CandlestickChart({ candles, levels, orderBlocks, fvgs })
         close: c.close,
       }));
 
-      // Deduplicate and sort by time
       const seen = new Set();
       const unique = data.filter((d) => {
         if (seen.has(d.time)) return false;
@@ -73,7 +71,6 @@ export default function CandlestickChart({ candles, levels, orderBlocks, fvgs })
       if (levels) {
         for (const level of levels) {
           if (Array.isArray(level.value)) {
-            // Zone - draw top and bottom lines
             const color =
               level.type === 'demand' ? '#22c55e' :
               level.type === 'supply' ? '#ef4444' :
@@ -112,7 +109,7 @@ export default function CandlestickChart({ candles, levels, orderBlocks, fvgs })
         }
       }
 
-      // Order block zones as price lines
+      // Order block zones
       if (orderBlocks) {
         for (const ob of orderBlocks) {
           const color = ob.type === 'demand' ? 'rgba(34,197,94,0.6)' : 'rgba(239,68,68,0.6)';
