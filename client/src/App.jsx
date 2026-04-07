@@ -11,6 +11,7 @@ import SessionTimeline from './components/SessionTimeline';
 import KillzoneStatus from './components/KillzoneStatus';
 import RiskCalculator from './components/RiskCalculator';
 import MTFBiasPanel from './components/MTFBiasPanel';
+import ScannerHeatmap from './components/ScannerHeatmap';
 
 function App() {
   const {
@@ -85,6 +86,9 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* Scanner — always visible */}
+        <ScannerHeatmap onSelectPair={(p) => { selectPair(p); fetchPair(p); }} />
 
         {/* Main Grid */}
         {data && (

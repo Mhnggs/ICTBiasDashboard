@@ -65,6 +65,53 @@ router.get('/analyze-all', async (req, res) => {
   }
 });
 
+router.get('/scanner', async (req, res) => {
+  try {
+    const results = await Promise.all(
+      SUPPORTED_PAIRS.map(async (pair) => {
+        try {
+          const data = await fetchPairData(pair);
+          const r = runAnalysis(
+            pair,
+            data.candles4H,
+            data.candles1H,
+            data.candles30m,
+            data.candles15m,
+            data.currentPrice,
+            { todayHigh: data.todayHigh, todayLow: data.todayLow, todayOpen: data.todayOpen }
+          );
+          return {
+            pair,
+            currentPrice: r.currentPrice,
+            bias: r.bias,
+            strength: r.strength,
+            strengthLabel: r.strengthLabel,
+            confidence: r.confidence,
+            timeframes: r.timeframes.map(tf => ({
+              label: tf.label,
+              bias: tf.bias,
+              bullCount: tf.bullCount,
+              bearCount: tf.bearCount,
+            })),
+            asian: {
+              high: r.asian.high,
+              low: r.asian.low,
+              highSwept: r.asian.highSwept,
+              lowSwept: r.asian.lowSwept,
+              complete: r.asian.complete,
+            },
+          };
+        } catch (err) {
+          return { pair, error: err.message };
+        }
+      })
+    );
+    res.json({ timestamp: new Date().toISOString(), results });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.get('/session', (req, res) => {
   res.json(getSessionInfo());
 });
