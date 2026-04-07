@@ -13,7 +13,11 @@ export function usePriceStream() {
     const connect = () => {
       if (cancelled) return;
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${proto}//${window.location.host}/ws`);
+      // In dev, bypass Vite's flaky ws proxy and hit the backend directly.
+      const host = import.meta.env.DEV
+        ? `${window.location.hostname}:3001`
+        : window.location.host;
+      const ws = new WebSocket(`${proto}//${host}/ws`);
       wsRef.current = ws;
 
       ws.onopen = () => setConnected(true);
