@@ -1,4 +1,4 @@
-export default function BiasCard({ data }) {
+export default function BiasCard({ data, livePrice }) {
   if (!data) {
     return (
       <div className="rounded-xl bg-bg-card border border-border p-6 flex items-center justify-center min-h-[180px]">
@@ -10,6 +10,17 @@ export default function BiasCard({ data }) {
   }
 
   const { pair, bias, confidence, currentPrice } = data;
+  const displayPrice = livePrice?.price ?? currentPrice;
+  const tickDir =
+    livePrice?.prev != null && livePrice?.price != null
+      ? livePrice.price > livePrice.prev
+        ? 'up'
+        : livePrice.price < livePrice.prev
+        ? 'down'
+        : 'flat'
+      : 'flat';
+  const tickColor =
+    tickDir === 'up' ? 'text-bull' : tickDir === 'down' ? 'text-bear' : 'text-text-primary';
 
   const biasColor =
     bias === "BULLISH"
@@ -40,9 +51,14 @@ export default function BiasCard({ data }) {
           </p>
         </div>
         <div className="text-right">
-          <span className="text-xs text-text-muted">Current Price</span>
-          <p className="font-mono text-lg text-text-primary">
-            {currentPrice != null ? currentPrice : "---"}
+          <span className="text-xs text-text-muted flex items-center justify-end gap-1">
+            {livePrice && (
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-bull animate-pulse" />
+            )}
+            {livePrice ? 'Live' : 'Current Price'}
+          </span>
+          <p className={`font-mono text-lg transition-colors ${tickColor}`}>
+            {displayPrice != null ? displayPrice : "---"}
           </p>
         </div>
       </div>

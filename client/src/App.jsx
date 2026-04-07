@@ -1,4 +1,5 @@
 import { useAnalysis, useSession } from './hooks/useAnalysis';
+import { usePriceStream } from './hooks/usePriceStream';
 import Header from './components/Header';
 import PairSelector from './components/PairSelector';
 import BiasCard from './components/BiasCard';
@@ -28,6 +29,8 @@ function App() {
   } = useAnalysis();
 
   const session = useSession();
+  const { prices: livePrices, connected: wsConnected } = usePriceStream();
+  const livePrice = data ? livePrices[data.pair] : null;
 
   return (
     <div className="min-h-screen bg-bg-primary">
@@ -56,6 +59,10 @@ function App() {
               />
               Auto-refresh (5 min)
             </label>
+            <span className="flex items-center gap-1.5 text-xs text-text-muted ml-3">
+              <span className={`inline-block w-2 h-2 rounded-full ${wsConnected ? 'bg-bull animate-pulse' : 'bg-bear'}`} />
+              {wsConnected ? 'Live stream' : 'Stream offline'}
+            </span>
           </div>
         </div>
 
@@ -84,7 +91,7 @@ function App() {
           <div className="fade-in space-y-4">
             {/* Top row: Bias + Levels + Checklist */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <BiasCard data={data} />
+              <BiasCard data={data} livePrice={livePrice} />
               <KeyLevels levels={data.levels} pair={data.pair} />
               <Checklist items={data.checklist} />
             </div>
