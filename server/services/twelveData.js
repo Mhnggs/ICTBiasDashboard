@@ -130,5 +130,6 @@ function getCacheStatus() {
 module.exports = {
   fetchPairData,
   getPrice,
+  getQuote,
   getCacheStatus,
 };

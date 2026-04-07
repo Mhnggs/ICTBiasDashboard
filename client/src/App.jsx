@@ -12,6 +12,7 @@ import KillzoneStatus from './components/KillzoneStatus';
 import RiskCalculator from './components/RiskCalculator';
 import MTFBiasPanel from './components/MTFBiasPanel';
 import ScannerHeatmap from './components/ScannerHeatmap';
+import StrengthMeter from './components/StrengthMeter';
 
 function App() {
   const {
@@ -87,8 +88,15 @@ function App() {
           </div>
         )}
 
-        {/* Scanner — always visible */}
-        <ScannerHeatmap onSelectPair={(p) => { selectPair(p); fetchPair(p); }} />
+        {/* Scanner + Strength — always visible */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2">
+            <ScannerHeatmap onSelectPair={(p) => { selectPair(p); fetchPair(p); }} />
+          </div>
+          <div className="lg:col-span-1">
+            <StrengthMeter />
+          </div>
+        </div>
 
         {/* Main Grid */}
         {data && (

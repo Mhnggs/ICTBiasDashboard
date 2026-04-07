@@ -3,6 +3,7 @@ const router = express.Router();
 const { fetchPairData, getCacheStatus } = require('../services/twelveData');
 const { runAnalysis } = require('../services/analysis');
 const { getSessionInfo } = require('../services/session');
+const { computeStrength } = require('../services/strength');
 const { SUPPORTED_PAIRS, sleep } = require('../utils/helpers');
 
 router.get('/analyze/:pair', async (req, res) => {
@@ -108,6 +109,16 @@ router.get('/scanner', async (req, res) => {
     );
     res.json({ timestamp: new Date().toISOString(), results });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/strength', async (req, res) => {
+  try {
+    const data = await computeStrength();
+    res.json(data);
+  } catch (err) {
+    console.error('Strength error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
