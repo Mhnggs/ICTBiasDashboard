@@ -56,7 +56,9 @@ function connectUpstream() {
       lastPrices.set(msg.symbol, tick);
       broadcast(tick);
     } else if (msg.event === 'subscribe-status') {
-      console.log('[priceStream] Subscribe status:', msg.status, msg.success?.length || 0, 'symbols');
+      console.log('[priceStream] Subscribe status:', JSON.stringify(msg, null, 2));
+    } else {
+      console.log('[priceStream] Upstream msg:', JSON.stringify(msg));
     }
   });
 
