@@ -9,6 +9,7 @@ import CandlestickChart from './components/CandlestickChart';
 import SessionTimeline from './components/SessionTimeline';
 import KillzoneStatus from './components/KillzoneStatus';
 import RiskCalculator from './components/RiskCalculator';
+import MTFBiasPanel from './components/MTFBiasPanel';
 
 function App() {
   const {
@@ -88,6 +89,13 @@ function App() {
               <Checklist items={data.checklist} />
             </div>
 
+            {/* MTF Bias Panel */}
+            <MTFBiasPanel
+              timeframes={data.timeframes}
+              strengthLabel={data.strengthLabel}
+              bias={data.bias}
+            />
+
             {/* Analysis Box */}
             <AnalysisBox analysis={data.analysis} />
 
@@ -95,8 +103,6 @@ function App() {
             <CandlestickChart
               candles={data.candles4H}
               levels={data.levels}
-              orderBlocks={data.orderBlocks}
-              fvgs={data.fvgs}
             />
 
             {/* Bottom row: Session + Risk */}

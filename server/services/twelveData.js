@@ -76,14 +76,15 @@ async function getPrice(symbol) {
 }
 
 async function fetchPairData(symbol) {
-  // Fetch all data needed for analysis: 4H, 1H candles + quote
+  // Fetch all timeframes needed: 4H, 1H, 30min, 15min + quote
   // Sequential to respect rate limits
-  const data4H = await getTimeSeries(symbol, '4h', 30);
-  const data1H = await getTimeSeries(symbol, '1h', 48);
+  const data4H = await getTimeSeries(symbol, '4h', 100);
+  const data1H = await getTimeSeries(symbol, '1h', 100);
+  const data30 = await getTimeSeries(symbol, '30min', 100);
+  const data15 = await getTimeSeries(symbol, '15min', 100);
   const quote = await getQuote(symbol);
 
-  // Parse candles (API returns newest first, reverse to oldest first)
-  const candles4H = (data4H.values || []).map(v => ({
+  const parseCandles = (data) => (data.values || []).map(v => ({
     datetime: v.datetime,
     open: parseFloat(v.open),
     high: parseFloat(v.high),
@@ -92,14 +93,10 @@ async function fetchPairData(symbol) {
     volume: parseFloat(v.volume || 0),
   })).reverse();
 
-  const candles1H = (data1H.values || []).map(v => ({
-    datetime: v.datetime,
-    open: parseFloat(v.open),
-    high: parseFloat(v.high),
-    low: parseFloat(v.low),
-    close: parseFloat(v.close),
-    volume: parseFloat(v.volume || 0),
-  })).reverse();
+  const candles4H = parseCandles(data4H);
+  const candles1H = parseCandles(data1H);
+  const candles30m = parseCandles(data30);
+  const candles15m = parseCandles(data15);
 
   const currentPrice = parseFloat(quote.close || quote.price);
   const previousClose = parseFloat(quote.previous_close || 0);
@@ -113,6 +110,8 @@ async function fetchPairData(symbol) {
     todayOpen,
     candles4H,
     candles1H,
+    candles30m,
+    candles15m,
     currentPrice,
     previousClose,
     quote,
