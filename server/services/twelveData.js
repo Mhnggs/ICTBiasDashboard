@@ -103,8 +103,14 @@ async function fetchPairData(symbol) {
 
   const currentPrice = parseFloat(quote.close || quote.price);
   const previousClose = parseFloat(quote.previous_close || 0);
+  const todayHigh = quote.high ? parseFloat(quote.high) : null;
+  const todayLow = quote.low ? parseFloat(quote.low) : null;
+  const todayOpen = quote.open ? parseFloat(quote.open) : null;
 
   return {
+    todayHigh,
+    todayLow,
+    todayOpen,
     candles4H,
     candles1H,
     currentPrice,

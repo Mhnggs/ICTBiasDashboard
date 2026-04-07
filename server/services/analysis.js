@@ -419,7 +419,7 @@ function generateAnalysis(pair, bias, trend, bos, ob, fvgs, asian, pdhl, liquidi
 }
 
 // Main analysis function
-function runAnalysis(pair, candles4H, candles1H, currentPrice) {
+function runAnalysis(pair, candles4H, candles1H, currentPrice, quoteHL = {}) {
   const pipValue = getPipValue(pair);
 
   const trend = detectTrend(candles4H);
@@ -435,6 +435,10 @@ function runAnalysis(pair, candles4H, candles1H, currentPrice) {
   const fvgs = detectFVGs(candles4H);
   const asian = detectAsianRange(candles1H);
   const pdhl = detectPreviousDayHL(candles1H);
+
+  // Override aggregated today H/L with the precise quote values when available
+  if (quoteHL.todayHigh != null) pdhl.todayHigh = quoteHL.todayHigh;
+  if (quoteHL.todayLow != null) pdhl.todayLow = quoteHL.todayLow;
   const liquidity = detectLiquidityPools(swings4H, pdhl.high, pdhl.low, currentPrice);
 
   const recentHigh = pdhl.todayHigh || pdhl.high;

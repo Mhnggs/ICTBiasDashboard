@@ -13,7 +13,11 @@ router.get('/analyze/:pair', async (req, res) => {
     }
 
     const data = await fetchPairData(pair);
-    const result = runAnalysis(pair, data.candles4H, data.candles1H, data.currentPrice);
+    const result = runAnalysis(pair, data.candles4H, data.candles1H, data.currentPrice, {
+      todayHigh: data.todayHigh,
+      todayLow: data.todayLow,
+      todayOpen: data.todayOpen,
+    });
     res.json(result);
   } catch (err) {
     console.error(`Analysis error for ${req.params.pair}:`, err.message);
@@ -31,7 +35,11 @@ router.get('/analyze-all', async (req, res) => {
       const pair = SUPPORTED_PAIRS[i];
       try {
         const data = await fetchPairData(pair);
-        const result = runAnalysis(pair, data.candles4H, data.candles1H, data.currentPrice);
+        const result = runAnalysis(pair, data.candles4H, data.candles1H, data.currentPrice, {
+      todayHigh: data.todayHigh,
+      todayLow: data.todayLow,
+      todayOpen: data.todayOpen,
+    });
         results.push(result);
       } catch (err) {
         console.error(`Error analyzing ${pair}:`, err.message);
