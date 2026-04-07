@@ -158,51 +158,44 @@ function detectFVGs(candles) {
 // The session belongs to the date it STARTED on (since it's all on the same calendar day).
 // Sweep detection only runs AFTER midnight (00:00 onwards on the next calendar day).
 function detectAsianRange(candles1H) {
-  if (!candles1H || candles1H.length === 0) {
+  if (!candles1H || candles1H.length < 5) {
     return { high: null, low: null, range: 0, highSwept: false, lowSwept: false, complete: false };
   }
 
-  // Tag each candle: asian session = hours 19,20,21,22,23 on a given calendar date
-  const tagged = candles1H.map(c => {
-    const [datePart, timePart] = c.datetime.split(' ');
+  const tagged = candles1H.map((c, idx) => {
+    const timePart = c.datetime.split(' ')[1] || '00:00:00';
     const hour = parseInt(timePart.split(':')[0], 10);
-    return { ...c, hour, datePart, isAsian: hour >= 19 && hour <= 23 };
+    return { ...c, hour, idx, isAsian: hour >= 19 && hour <= 23 };
   });
 
-  // Group asian candles by their calendar date (the day they occurred)
-  const sessions = {};
-  for (const c of tagged) {
-    if (!c.isAsian) continue;
-    if (!sessions[c.datePart]) sessions[c.datePart] = [];
-    sessions[c.datePart].push(c);
+  // Walk backwards from the most recent candle to find the latest asian-hour candle.
+  let lastAsianIdx = -1;
+  for (let i = tagged.length - 1; i >= 0; i--) {
+    if (tagged[i].isAsian) { lastAsianIdx = i; break; }
   }
 
-  const sessionDates = Object.keys(sessions).sort();
-  if (sessionDates.length === 0) {
+  if (lastAsianIdx === -1) {
     return { high: null, low: null, range: 0, highSwept: false, lowSwept: false, complete: false };
   }
 
-  // Take the latest session. It's "complete" only if it has the 23:00 candle (final hour).
-  let targetDate = sessionDates[sessionDates.length - 1];
-  let asianCandles = sessions[targetDate];
-  let complete = asianCandles.some(c => c.hour === 23);
-
-  // If latest isn't complete and we have a prior complete one, fall back to it
-  if (!complete && sessionDates.length >= 2) {
-    targetDate = sessionDates[sessionDates.length - 2];
-    asianCandles = sessions[targetDate];
-    complete = asianCandles.some(c => c.hour === 23);
+  // Walk further back to gather the contiguous asian block
+  const blockCandles = [];
+  for (let i = lastAsianIdx; i >= 0; i--) {
+    if (tagged[i].isAsian) blockCandles.unshift(tagged[i]);
+    else break;
   }
 
-  const high = Math.max(...asianCandles.map(c => c.high));
-  const low = Math.min(...asianCandles.map(c => c.low));
+  const high = Math.max(...blockCandles.map(c => c.high));
+  const low = Math.min(...blockCandles.map(c => c.low));
 
-  // Sweep detection: only candles AFTER midnight on the day FOLLOWING targetDate
-  const nextDay = new Date(targetDate + 'T00:00:00');
-  nextDay.setDate(nextDay.getDate() + 1);
-  const nextDayStr = nextDay.toISOString().split('T')[0];
+  // Session is complete only if hour 23 is in the block AND we have at least
+  // one candle AFTER the block (i.e. the session has actually ended).
+  const hasClose = blockCandles.some(c => c.hour === 23);
+  const hasPostCandle = lastAsianIdx < tagged.length - 1;
+  const complete = hasClose && hasPostCandle;
 
-  const postCandles = tagged.filter(c => c.datePart === nextDayStr && c.hour >= 0 && c.hour <= 23);
+  // Sweeps are checked ONLY on candles strictly after the asian block.
+  const postCandles = tagged.slice(lastAsianIdx + 1);
 
   let highSwept = false, lowSwept = false;
   for (const c of postCandles) {
@@ -210,7 +203,16 @@ function detectAsianRange(candles1H) {
     if (c.low < low) lowSwept = true;
   }
 
-  return { high, low, range: high - low, highSwept, lowSwept, complete, sessionDate: targetDate };
+  return {
+    high,
+    low,
+    range: high - low,
+    highSwept,
+    lowSwept,
+    complete,
+    sessionStart: blockCandles[0].datetime,
+    sessionEnd: blockCandles[blockCandles.length - 1].datetime,
+  };
 }
 
 // 7. Previous Day H/L
