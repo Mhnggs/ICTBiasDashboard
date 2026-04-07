@@ -154,36 +154,27 @@ function detectFVGs(candles) {
   return fvgs;
 }
 
-// 6. Asian Range with sweep detection
-// Asian session runs 19:00 (prev day) → 02:00 (next day) EST.
-// We tag each candle with a "session date" (the day the session ENDS on)
-// then take the MOST RECENT completed session and check sweeps only after it.
+// 6. ICT Asian Range: 19:00 - 24:00 EST (7 PM - midnight NY time)
+// The session belongs to the date it STARTED on (since it's all on the same calendar day).
+// Sweep detection only runs AFTER midnight (00:00 onwards on the next calendar day).
 function detectAsianRange(candles1H) {
   if (!candles1H || candles1H.length === 0) {
     return { high: null, low: null, range: 0, highSwept: false, lowSwept: false, complete: false };
   }
 
-  // Tag each candle with its asian-session-date (date when the session ended)
-  // Hours 19-23 belong to NEXT day's session, hours 0-1 belong to CURRENT day's session
+  // Tag each candle: asian session = hours 19,20,21,22,23 on a given calendar date
   const tagged = candles1H.map(c => {
     const [datePart, timePart] = c.datetime.split(' ');
     const hour = parseInt(timePart.split(':')[0], 10);
-    let sessionDate = datePart;
-    if (hour >= 19) {
-      // belongs to next day's Asian session
-      const d = new Date(datePart + 'T00:00:00');
-      d.setDate(d.getDate() + 1);
-      sessionDate = d.toISOString().split('T')[0];
-    }
-    return { ...c, hour, sessionDate, isAsian: hour >= 19 || hour < 2 };
+    return { ...c, hour, datePart, isAsian: hour >= 19 && hour <= 23 };
   });
 
-  // Group asian candles by sessionDate
+  // Group asian candles by their calendar date (the day they occurred)
   const sessions = {};
   for (const c of tagged) {
     if (!c.isAsian) continue;
-    if (!sessions[c.sessionDate]) sessions[c.sessionDate] = [];
-    sessions[c.sessionDate].push(c);
+    if (!sessions[c.datePart]) sessions[c.datePart] = [];
+    sessions[c.datePart].push(c);
   }
 
   const sessionDates = Object.keys(sessions).sort();
@@ -191,31 +182,27 @@ function detectAsianRange(candles1H) {
     return { high: null, low: null, range: 0, highSwept: false, lowSwept: false, complete: false };
   }
 
-  // Find the most recent session that has formed (has candle at hour 1 = last hour of asian session)
-  // Or just take the latest one
+  // Take the latest session. It's "complete" only if it has the 23:00 candle (final hour).
   let targetDate = sessionDates[sessionDates.length - 1];
   let asianCandles = sessions[targetDate];
+  let complete = asianCandles.some(c => c.hour === 23);
 
-  // A session is "complete" if it has its closing hour (01:00 candle exists)
-  const hasClose = asianCandles.some(c => c.hour === 1);
-
-  // If the latest session isn't complete yet AND we have a previous one, prefer the previous complete one
-  if (!hasClose && sessionDates.length >= 2) {
+  // If latest isn't complete and we have a prior complete one, fall back to it
+  if (!complete && sessionDates.length >= 2) {
     targetDate = sessionDates[sessionDates.length - 2];
     asianCandles = sessions[targetDate];
-  }
-
-  if (!asianCandles || asianCandles.length === 0) {
-    return { high: null, low: null, range: 0, highSwept: false, lowSwept: false, complete: false };
+    complete = asianCandles.some(c => c.hour === 23);
   }
 
   const high = Math.max(...asianCandles.map(c => c.high));
   const low = Math.min(...asianCandles.map(c => c.low));
-  const complete = asianCandles.some(c => c.hour === 1);
 
-  // Sweep detection: look ONLY at candles AFTER this Asian session ended
-  // i.e. candles on `targetDate` with hour >= 2 (London/NY of the same trading day)
-  const postCandles = tagged.filter(c => c.sessionDate === targetDate && !c.isAsian);
+  // Sweep detection: only candles AFTER midnight on the day FOLLOWING targetDate
+  const nextDay = new Date(targetDate + 'T00:00:00');
+  nextDay.setDate(nextDay.getDate() + 1);
+  const nextDayStr = nextDay.toISOString().split('T')[0];
+
+  const postCandles = tagged.filter(c => c.datePart === nextDayStr && c.hour >= 0 && c.hour <= 23);
 
   let highSwept = false, lowSwept = false;
   for (const c of postCandles) {
@@ -362,7 +349,7 @@ function generateAnalysis(pair, bias, trend, bos, ob, fvgs, asian, pdhl, liquidi
     const steps = [];
     if (asian.high) {
       if (!asian.complete) {
-        steps.push(`1) Asian session still forming. Provisional high: ${formatPrice(asian.high, pair)}. Wait for session close (02:00 EST), then for the high to get swept.`);
+        steps.push(`1) Asian session still forming. Provisional high: ${formatPrice(asian.high, pair)}. Wait for session close (midnight EST), then for the high to get swept.`);
       } else if (asian.highSwept) {
         steps.push(`1) Asia high (${formatPrice(asian.high, pair)}) has been SWEPT — liquidity grabbed above. Setup is live.`);
       } else {
@@ -384,7 +371,7 @@ function generateAnalysis(pair, bias, trend, bos, ob, fvgs, asian, pdhl, liquidi
     const steps = [];
     if (asian.low) {
       if (!asian.complete) {
-        steps.push(`1) Asian session still forming. Provisional low: ${formatPrice(asian.low, pair)}. Wait for session close (02:00 EST), then for the low to get swept.`);
+        steps.push(`1) Asian session still forming. Provisional low: ${formatPrice(asian.low, pair)}. Wait for session close (midnight EST), then for the low to get swept.`);
       } else if (asian.lowSwept) {
         steps.push(`1) Asia low (${formatPrice(asian.low, pair)}) has been SWEPT — liquidity grabbed below. Setup is live.`);
       } else {
@@ -551,7 +538,7 @@ function runAnalysis(pair, candles4H, candles1H, currentPrice) {
     },
     {
       text: !asian.complete
-        ? `Asian session still forming — wait for 02:00 EST close`
+        ? `Asian session still forming — wait for midnight EST close`
         : bias === 'BEARISH'
           ? (asian.high
               ? (asian.highSwept ? 'Asia high already swept' : `Asia high (${formatPrice(asian.high, pair)}) NOT swept — wait for sweep`)
