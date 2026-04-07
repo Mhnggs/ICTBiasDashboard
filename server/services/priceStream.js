@@ -29,13 +29,10 @@ function connectUpstream() {
   upstream.on('open', () => {
     upstreamReady = true;
     console.log('[priceStream] Upstream connected');
-    // Subscribe each pair individually so a single rejection doesn't kill the batch.
-    for (const sym of SUPPORTED_PAIRS) {
-      upstream.send(JSON.stringify({
-        action: 'subscribe',
-        params: { symbols: sym },
-      }));
-    }
+    upstream.send(JSON.stringify({
+      action: 'subscribe',
+      params: { symbols: SUPPORTED_PAIRS.join(',') },
+    }));
     clearInterval(heartbeatTimer);
     heartbeatTimer = setInterval(() => {
       if (upstream && upstream.readyState === WebSocket.OPEN) {
