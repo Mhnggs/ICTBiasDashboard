@@ -155,29 +155,75 @@ function detectFVGs(candles) {
 }
 
 // 6. Asian Range with sweep detection
+// Asian session runs 19:00 (prev day) → 02:00 (next day) EST.
+// We tag each candle with a "session date" (the day the session ENDS on)
+// then take the MOST RECENT completed session and check sweeps only after it.
 function detectAsianRange(candles1H) {
-  const asianCandles = candles1H.filter(c => {
-    const hour = parseInt(c.datetime.split(' ')[1].split(':')[0], 10);
-    return hour >= 19 || hour < 2;
+  if (!candles1H || candles1H.length === 0) {
+    return { high: null, low: null, range: 0, highSwept: false, lowSwept: false, complete: false };
+  }
+
+  // Tag each candle with its asian-session-date (date when the session ended)
+  // Hours 19-23 belong to NEXT day's session, hours 0-1 belong to CURRENT day's session
+  const tagged = candles1H.map(c => {
+    const [datePart, timePart] = c.datetime.split(' ');
+    const hour = parseInt(timePart.split(':')[0], 10);
+    let sessionDate = datePart;
+    if (hour >= 19) {
+      // belongs to next day's Asian session
+      const d = new Date(datePart + 'T00:00:00');
+      d.setDate(d.getDate() + 1);
+      sessionDate = d.toISOString().split('T')[0];
+    }
+    return { ...c, hour, sessionDate, isAsian: hour >= 19 || hour < 2 };
   });
 
-  if (asianCandles.length === 0) return { high: null, low: null, range: 0, highSwept: false, lowSwept: false };
+  // Group asian candles by sessionDate
+  const sessions = {};
+  for (const c of tagged) {
+    if (!c.isAsian) continue;
+    if (!sessions[c.sessionDate]) sessions[c.sessionDate] = [];
+    sessions[c.sessionDate].push(c);
+  }
+
+  const sessionDates = Object.keys(sessions).sort();
+  if (sessionDates.length === 0) {
+    return { high: null, low: null, range: 0, highSwept: false, lowSwept: false, complete: false };
+  }
+
+  // Find the most recent session that has formed (has candle at hour 1 = last hour of asian session)
+  // Or just take the latest one
+  let targetDate = sessionDates[sessionDates.length - 1];
+  let asianCandles = sessions[targetDate];
+
+  // A session is "complete" if it has its closing hour (01:00 candle exists)
+  const hasClose = asianCandles.some(c => c.hour === 1);
+
+  // If the latest session isn't complete yet AND we have a previous one, prefer the previous complete one
+  if (!hasClose && sessionDates.length >= 2) {
+    targetDate = sessionDates[sessionDates.length - 2];
+    asianCandles = sessions[targetDate];
+  }
+
+  if (!asianCandles || asianCandles.length === 0) {
+    return { high: null, low: null, range: 0, highSwept: false, lowSwept: false, complete: false };
+  }
 
   const high = Math.max(...asianCandles.map(c => c.high));
   const low = Math.min(...asianCandles.map(c => c.low));
+  const complete = asianCandles.some(c => c.hour === 1);
 
-  const postAsianCandles = candles1H.filter(c => {
-    const hour = parseInt(c.datetime.split(' ')[1].split(':')[0], 10);
-    return hour >= 2 && hour < 19;
-  });
+  // Sweep detection: look ONLY at candles AFTER this Asian session ended
+  // i.e. candles on `targetDate` with hour >= 2 (London/NY of the same trading day)
+  const postCandles = tagged.filter(c => c.sessionDate === targetDate && !c.isAsian);
 
   let highSwept = false, lowSwept = false;
-  for (const c of postAsianCandles) {
+  for (const c of postCandles) {
     if (c.high > high) highSwept = true;
     if (c.low < low) lowSwept = true;
   }
 
-  return { high, low, range: high - low, highSwept, lowSwept };
+  return { high, low, range: high - low, highSwept, lowSwept, complete, sessionDate: targetDate };
 }
 
 // 7. Previous Day H/L
@@ -315,8 +361,13 @@ function generateAnalysis(pair, bias, trend, bos, ob, fvgs, asian, pdhl, liquidi
   if (bias === 'BEARISH') {
     const steps = [];
     if (asian.high) {
-      if (asian.highSwept) steps.push(`1) Asia high (${formatPrice(asian.high, pair)}) has been SWEPT — liquidity grabbed above. Setup is live.`);
-      else steps.push(`1) WAIT for Asia high (${formatPrice(asian.high, pair)}) to get swept before looking for shorts.`);
+      if (!asian.complete) {
+        steps.push(`1) Asian session still forming. Provisional high: ${formatPrice(asian.high, pair)}. Wait for session close (02:00 EST), then for the high to get swept.`);
+      } else if (asian.highSwept) {
+        steps.push(`1) Asia high (${formatPrice(asian.high, pair)}) has been SWEPT — liquidity grabbed above. Setup is live.`);
+      } else {
+        steps.push(`1) WAIT for Asia high (${formatPrice(asian.high, pair)}) to get swept before looking for shorts.`);
+      }
     }
     if (ob && ob.type === 'supply') {
       steps.push(`2) Look for price to tap into the supply OB at ${formatPrice(ob.zone[0], pair)}-${formatPrice(ob.zone[1], pair)}.`);
@@ -332,8 +383,13 @@ function generateAnalysis(pair, bias, trend, bos, ob, fvgs, asian, pdhl, liquidi
   } else if (bias === 'BULLISH') {
     const steps = [];
     if (asian.low) {
-      if (asian.lowSwept) steps.push(`1) Asia low (${formatPrice(asian.low, pair)}) has been SWEPT — liquidity grabbed below. Setup is live.`);
-      else steps.push(`1) WAIT for Asia low (${formatPrice(asian.low, pair)}) to get swept before looking for longs.`);
+      if (!asian.complete) {
+        steps.push(`1) Asian session still forming. Provisional low: ${formatPrice(asian.low, pair)}. Wait for session close (02:00 EST), then for the low to get swept.`);
+      } else if (asian.lowSwept) {
+        steps.push(`1) Asia low (${formatPrice(asian.low, pair)}) has been SWEPT — liquidity grabbed below. Setup is live.`);
+      } else {
+        steps.push(`1) WAIT for Asia low (${formatPrice(asian.low, pair)}) to get swept before looking for longs.`);
+      }
     }
     if (ob && ob.type === 'demand') {
       steps.push(`2) Look for price to tap into the demand OB at ${formatPrice(ob.zone[0], pair)}-${formatPrice(ob.zone[1], pair)}.`);
@@ -400,9 +456,10 @@ function runAnalysis(pair, candles4H, candles1H, currentPrice) {
 
   const insideKZ = isInsideKillzone();
 
-  const asianSweepReady =
+  const asianSweepReady = asian.complete && (
     (bias === 'BEARISH' && asian.high && !asian.highSwept) ||
-    (bias === 'BULLISH' && asian.low && !asian.lowSwept);
+    (bias === 'BULLISH' && asian.low && !asian.lowSwept)
+  );
 
   let nearKeyLevel = false;
   if (primaryOB) {
@@ -446,8 +503,16 @@ function runAnalysis(pair, candles4H, candles1H, currentPrice) {
   if (pdhl.todayLow) levels.push({ label: 'Today Low', value: pdhl.todayLow, type: 'support' });
   if (pdhl.high) levels.push({ label: 'Prev Day High', value: pdhl.high, type: 'resistance' });
   if (pdhl.low) levels.push({ label: 'Prev Day Low', value: pdhl.low, type: 'support' });
-  if (asian.high) levels.push({ label: `Asian High${asian.highSwept ? ' (swept)' : ''}`, value: asian.high, type: 'resistance' });
-  if (asian.low) levels.push({ label: `Asian Low${asian.lowSwept ? ' (swept)' : ''}`, value: asian.low, type: 'support' });
+  if (asian.high) levels.push({
+    label: `Asian High${!asian.complete ? ' (forming)' : asian.highSwept ? ' (swept)' : ''}`,
+    value: asian.high,
+    type: 'resistance',
+  });
+  if (asian.low) levels.push({
+    label: `Asian Low${!asian.complete ? ' (forming)' : asian.lowSwept ? ' (swept)' : ''}`,
+    value: asian.low,
+    type: 'support',
+  });
   if (primaryOB) {
     levels.push({
       label: `4H ${primaryOB.type === 'demand' ? 'Demand' : 'Supply'} OB`,
@@ -485,16 +550,21 @@ function runAnalysis(pair, candles4H, candles1H, currentPrice) {
       passed: !!primaryOB,
     },
     {
-      text: bias === 'BEARISH'
-        ? (asian.high
-            ? (asian.highSwept ? 'Asia high already swept ✓' : `Asia high (${formatPrice(asian.high, pair)}) NOT swept — wait for sweep`)
-            : 'No Asian range data')
-        : bias === 'BULLISH'
-          ? (asian.low
-              ? (asian.lowSwept ? 'Asia low already swept ✓' : `Asia low (${formatPrice(asian.low, pair)}) NOT swept — wait for sweep`)
+      text: !asian.complete
+        ? `Asian session still forming — wait for 02:00 EST close`
+        : bias === 'BEARISH'
+          ? (asian.high
+              ? (asian.highSwept ? 'Asia high already swept' : `Asia high (${formatPrice(asian.high, pair)}) NOT swept — wait for sweep`)
               : 'No Asian range data')
-          : 'Asian sweep N/A (neutral bias)',
-      passed: bias === 'BEARISH' ? (asian.highSwept === true) : bias === 'BULLISH' ? (asian.lowSwept === true) : null,
+          : bias === 'BULLISH'
+            ? (asian.low
+                ? (asian.lowSwept ? 'Asia low already swept' : `Asia low (${formatPrice(asian.low, pair)}) NOT swept — wait for sweep`)
+                : 'No Asian range data')
+            : 'Asian sweep N/A (neutral bias)',
+      passed: !asian.complete ? null
+        : bias === 'BEARISH' ? (asian.highSwept === true)
+        : bias === 'BULLISH' ? (asian.lowSwept === true)
+        : null,
     },
     {
       text: `Price in ${premDisc.zone} zone (${premDisc.level.toFixed(0)}%)`,
