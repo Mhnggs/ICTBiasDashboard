@@ -5,24 +5,19 @@ export default function Header({ session }) {
 
   useEffect(() => {
     const tick = () => {
-      const now = session?.estTime
-        ? new Date(session.estTime)
-        : new Date(
-            new Date().toLocaleString("en-US", { timeZone: "America/New_York" })
-          );
-      setClock(
-        now.toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: true,
-        })
-      );
+      const est = new Date().toLocaleTimeString("en-US", {
+        timeZone: "America/New_York",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      });
+      setClock(est);
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [session?.estTime]);
+  }, []);
 
   const killzone = session?.activeKillzone;
 
