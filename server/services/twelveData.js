@@ -71,6 +71,10 @@ async function getQuote(symbol) {
   return apiCall('/quote', { symbol });
 }
 
+async function getATR(symbol, interval = '1h', timePeriod = 14) {
+  return apiCall('/atr', { symbol, interval, time_period: timePeriod, outputsize: 1 });
+}
+
 async function getPrice(symbol) {
   return apiCall('/price', { symbol });
 }
@@ -131,5 +135,6 @@ module.exports = {
   fetchPairData,
   getPrice,
   getQuote,
+  getATR,
   getCacheStatus,
 };

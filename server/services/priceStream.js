@@ -9,12 +9,24 @@ let reconnectTimer = null;
 let heartbeatTimer = null;
 const clients = new Set();
 const lastPrices = new Map(); // symbol -> { price, timestamp }
+let lastScanner = null;       // most recent scanner snapshot
+let lastStrength = null;      // most recent strength snapshot
 
 function broadcast(msg) {
   const json = JSON.stringify(msg);
   for (const ws of clients) {
     if (ws.readyState === WebSocket.OPEN) ws.send(json);
   }
+}
+
+function pushScanner(snapshot) {
+  lastScanner = snapshot;
+  broadcast({ type: 'scanner', ...snapshot });
+}
+
+function pushStrength(snapshot) {
+  lastStrength = snapshot;
+  broadcast({ type: 'strength', ...snapshot });
 }
 
 function connectUpstream() {
@@ -84,6 +96,8 @@ function attach(server) {
     for (const tick of lastPrices.values()) {
       ws.send(JSON.stringify(tick));
     }
+    if (lastScanner) ws.send(JSON.stringify({ type: 'scanner', ...lastScanner }));
+    if (lastStrength) ws.send(JSON.stringify({ type: 'strength', ...lastStrength }));
     ws.send(JSON.stringify({ type: 'status', upstream: upstreamReady }));
     ws.on('close', () => {
       clients.delete(ws);
@@ -94,4 +108,4 @@ function attach(server) {
   connectUpstream();
 }
 
-module.exports = { attach };
+module.exports = { attach, pushScanner, pushStrength };

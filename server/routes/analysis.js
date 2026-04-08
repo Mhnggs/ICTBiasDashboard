@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { fetchPairData, getCacheStatus } = require('../services/twelveData');
+const { fetchPairData, getCacheStatus, getATR, getQuote } = require('../services/twelveData');
 const { runAnalysis } = require('../services/analysis');
 const { getSessionInfo } = require('../services/session');
 const { computeStrength } = require('../services/strength');
@@ -68,46 +68,85 @@ router.get('/analyze-all', async (req, res) => {
 
 router.get('/scanner', async (req, res) => {
   try {
-    const results = await Promise.all(
-      SUPPORTED_PAIRS.map(async (pair) => {
-        try {
-          const data = await fetchPairData(pair);
-          const r = runAnalysis(
-            pair,
-            data.candles4H,
-            data.candles1H,
-            data.candles30m,
-            data.candles15m,
-            data.currentPrice,
-            { todayHigh: data.todayHigh, todayLow: data.todayLow, todayOpen: data.todayOpen }
-          );
-          return {
-            pair,
-            currentPrice: r.currentPrice,
-            bias: r.bias,
-            strength: r.strength,
-            strengthLabel: r.strengthLabel,
-            confidence: r.confidence,
-            timeframes: r.timeframes.map(tf => ({
-              label: tf.label,
-              bias: tf.bias,
-              bullCount: tf.bullCount,
-              bearCount: tf.bearCount,
-            })),
-            asian: {
-              high: r.asian.high,
-              low: r.asian.low,
-              highSwept: r.asian.highSwept,
-              lowSwept: r.asian.lowSwept,
-              complete: r.asian.complete,
-            },
-          };
-        } catch (err) {
-          return { pair, error: err.message };
-        }
-      })
+    const snapshot = await buildScannerSnapshot();
+    res.json(snapshot);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+async function buildScannerRow(pair) {
+  try {
+    const data = await fetchPairData(pair);
+    const r = runAnalysis(
+      pair,
+      data.candles4H,
+      data.candles1H,
+      data.candles30m,
+      data.candles15m,
+      data.currentPrice,
+      { todayHigh: data.todayHigh, todayLow: data.todayLow, todayOpen: data.todayOpen }
     );
-    res.json({ timestamp: new Date().toISOString(), results });
+    return {
+      pair,
+      currentPrice: r.currentPrice,
+      bias: r.bias,
+      strength: r.strength,
+      strengthLabel: r.strengthLabel,
+      confidence: r.confidence,
+      timeframes: r.timeframes.map(tf => ({
+        label: tf.label,
+        bias: tf.bias,
+        bullCount: tf.bullCount,
+        bearCount: tf.bearCount,
+      })),
+      asian: {
+        high: r.asian.high,
+        low: r.asian.low,
+        highSwept: r.asian.highSwept,
+        lowSwept: r.asian.lowSwept,
+        complete: r.asian.complete,
+      },
+    };
+  } catch (err) {
+    return { pair, error: err.message };
+  }
+}
+
+async function buildScannerSnapshot() {
+  const results = await Promise.all(SUPPORTED_PAIRS.map(buildScannerRow));
+  return { timestamp: new Date().toISOString(), results };
+}
+
+router.get('/atr/:pair', async (req, res) => {
+  try {
+    const pair = req.params.pair.replace('-', '/').toUpperCase();
+    const interval = req.query.interval || '1h';
+    const period = parseInt(req.query.period || '14', 10);
+    const data = await getATR(pair, interval, period);
+    const latest = data.values?.[0];
+    const atr = latest ? parseFloat(latest.atr) : null;
+    res.json({ pair, interval, period, atr, datetime: latest?.datetime });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/dxy', async (req, res) => {
+  try {
+    const q = await getQuote('DXY');
+    const close = parseFloat(q.close ?? q.price);
+    const prev = parseFloat(q.previous_close);
+    const change = isFinite(close) && isFinite(prev) ? close - prev : null;
+    const pct = change != null && prev ? (change / prev) * 100 : null;
+    res.json({
+      symbol: 'DXY',
+      price: close,
+      previousClose: prev,
+      change,
+      pct,
+      direction: change == null ? 'flat' : change > 0 ? 'up' : change < 0 ? 'down' : 'flat',
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -132,3 +171,4 @@ router.get('/cache-status', (req, res) => {
 });
 
 module.exports = router;
+module.exports.buildScannerSnapshot = buildScannerSnapshot;

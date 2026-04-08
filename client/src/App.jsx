@@ -13,6 +13,7 @@ import RiskCalculator from './components/RiskCalculator';
 import MTFBiasPanel from './components/MTFBiasPanel';
 import ScannerHeatmap from './components/ScannerHeatmap';
 import StrengthMeter from './components/StrengthMeter';
+import DxyBadge from './components/DxyBadge';
 
 function App() {
   const {
@@ -31,7 +32,12 @@ function App() {
   } = useAnalysis();
 
   const session = useSession();
-  const { prices: livePrices, connected: wsConnected } = usePriceStream();
+  const {
+    prices: livePrices,
+    scanner: liveScanner,
+    strength: liveStrength,
+    connected: wsConnected,
+  } = usePriceStream();
   const livePrice = data ? livePrices[data.pair] : null;
 
   return (
@@ -88,13 +94,17 @@ function App() {
           </div>
         )}
 
-        {/* Scanner + Strength — always visible */}
+        {/* Scanner + Strength + DXY — always visible (live via WS) */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
-            <ScannerHeatmap onSelectPair={(p) => { selectPair(p); fetchPair(p); }} />
+            <ScannerHeatmap
+              onSelectPair={(p) => { selectPair(p); fetchPair(p); }}
+              liveSnapshot={liveScanner}
+            />
           </div>
-          <div className="lg:col-span-1">
-            <StrengthMeter />
+          <div className="lg:col-span-1 space-y-4">
+            <DxyBadge pair={selectedPair} />
+            <StrengthMeter liveSnapshot={liveStrength} />
           </div>
         </div>
 
@@ -133,7 +143,7 @@ function App() {
                 <KillzoneStatus session={session} />
               </div>
               <div className="md:col-span-1">
-                <RiskCalculator />
+                <RiskCalculator pair={selectedPair} />
               </div>
             </div>
           </div>
@@ -149,7 +159,7 @@ function App() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <SessionTimeline session={session} />
               <KillzoneStatus session={session} />
-              <RiskCalculator />
+              <RiskCalculator pair={selectedPair} />
             </div>
           </div>
         )}

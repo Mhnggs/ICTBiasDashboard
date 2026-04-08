@@ -5,6 +5,7 @@ const cors = require('cors');
 const path = require('path');
 const analysisRoutes = require('./routes/analysis');
 const priceStream = require('./services/priceStream');
+const poller = require('./services/poller');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -25,6 +26,7 @@ if (process.env.NODE_ENV === 'production') {
 
 const server = http.createServer(app);
 priceStream.attach(server);
+poller.start();
 
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);

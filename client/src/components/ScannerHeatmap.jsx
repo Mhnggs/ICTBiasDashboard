@@ -17,7 +17,7 @@ function strengthBadge(strength) {
   return 'bg-bg-primary text-text-muted border border-border';
 }
 
-export default function ScannerHeatmap({ onSelectPair }) {
+export default function ScannerHeatmap({ onSelectPair, liveSnapshot }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -37,10 +37,23 @@ export default function ScannerHeatmap({ onSelectPair }) {
     }
   }, []);
 
+  // Apply live WS pushes when present
   useEffect(() => {
-    load();
-    const id = setInterval(load, 5 * 60 * 1000);
+    if (liveSnapshot?.results) {
+      setRows(liveSnapshot.results);
+      setUpdatedAt(new Date(liveSnapshot.timestamp));
+    }
+  }, [liveSnapshot]);
+
+  useEffect(() => {
+    // Only fetch on mount if no live snapshot has arrived yet
+    if (!liveSnapshot) load();
+    // Safety net: poll every 5 min in case WS is down
+    const id = setInterval(() => {
+      if (!liveSnapshot) load();
+    }, 5 * 60 * 1000);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   return (

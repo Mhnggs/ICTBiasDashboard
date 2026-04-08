@@ -7,7 +7,7 @@ function colorFor(avgPct) {
   return 'bg-warn';
 }
 
-export default function StrengthMeter() {
+export default function StrengthMeter({ liveSnapshot }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -26,9 +26,16 @@ export default function StrengthMeter() {
   }, []);
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, 5 * 60 * 1000);
+    if (liveSnapshot) setData(liveSnapshot);
+  }, [liveSnapshot]);
+
+  useEffect(() => {
+    if (!liveSnapshot) load();
+    const id = setInterval(() => {
+      if (!liveSnapshot) load();
+    }, 5 * 60 * 1000);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
 
   return (

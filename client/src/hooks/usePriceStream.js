@@ -1,8 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 
-// Subscribes to server WS and exposes a map of symbol -> { price, timestamp, bid, ask }
+// Subscribes to server WS and exposes:
+//  - prices: { [symbol]: { price, timestamp, bid, ask, prev } }
+//  - scanner: latest scanner snapshot pushed from server
+//  - strength: latest strength snapshot pushed from server
+//  - connected: WS state
 export function usePriceStream() {
   const [prices, setPrices] = useState({});
+  const [scanner, setScanner] = useState(null);
+  const [strength, setStrength] = useState(null);
   const [connected, setConnected] = useState(false);
   const wsRef = useRef(null);
   const reconnectRef = useRef(null);
@@ -46,6 +52,15 @@ export function usePriceStream() {
                 },
               };
             });
+          } else if (msg.type === 'scanner') {
+            setScanner({ timestamp: msg.timestamp, results: msg.results });
+          } else if (msg.type === 'strength') {
+            setStrength({
+              timestamp: msg.timestamp,
+              currencies: msg.currencies,
+              pairsUsed: msg.pairsUsed,
+              pairsTotal: msg.pairsTotal,
+            });
           }
         } catch {
           // ignore
@@ -61,5 +76,5 @@ export function usePriceStream() {
     };
   }, []);
 
-  return { prices, connected };
+  return { prices, scanner, strength, connected };
 }
