@@ -67,6 +67,25 @@ async function getTimeSeries(symbol, interval, outputsize) {
   });
 }
 
+// Deep history (up to 5000 bars on Grow). Used by backtester.
+async function getDeepHistory(symbol, interval, outputsize = 1000) {
+  const data = await apiCall('/time_series', {
+    symbol,
+    interval,
+    outputsize,
+    timezone: 'America/New_York',
+  });
+  return (data.values || [])
+    .map((v) => ({
+      datetime: v.datetime,
+      open: parseFloat(v.open),
+      high: parseFloat(v.high),
+      low: parseFloat(v.low),
+      close: parseFloat(v.close),
+    }))
+    .reverse(); // oldest -> newest
+}
+
 async function getQuote(symbol) {
   return apiCall('/quote', { symbol });
 }
@@ -144,5 +163,6 @@ module.exports = {
   getQuote,
   getATR,
   getEconomicCalendar,
+  getDeepHistory,
   getCacheStatus,
 };

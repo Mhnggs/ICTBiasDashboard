@@ -6,6 +6,8 @@ const { getSessionInfo } = require('../services/session');
 const { computeStrength } = require('../services/strength');
 const { fetchCalendar } = require('../services/economicCalendar');
 const { computeCorrelation } = require('../services/correlation');
+const journal = require('../services/journal');
+const { runBacktest } = require('../services/backtest');
 const { SUPPORTED_PAIRS, sleep } = require('../utils/helpers');
 
 router.get('/analyze/:pair', async (req, res) => {
@@ -184,6 +186,48 @@ router.get('/correlation', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('Correlation error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/journal/list', (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit || '50', 10);
+    res.json({ signals: journal.listSignals(limit) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/journal/stats', (req, res) => {
+  try {
+    res.json(journal.getStats());
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/journal/resolve', async (req, res) => {
+  try {
+    const r = await journal.resolveOpenSignals();
+    res.json(r);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/backtest/:pair', async (req, res) => {
+  try {
+    const pair = req.params.pair.replace('-', '/').toUpperCase();
+    if (!SUPPORTED_PAIRS.includes(pair)) {
+      return res.status(400).json({ error: `Unsupported pair: ${pair}` });
+    }
+    const days = parseInt(req.query.days || '30', 10);
+    const onlyAligned = req.query.onlyAligned === '1';
+    const data = await runBacktest({ pair, days, onlyAligned });
+    res.json(data);
+  } catch (err) {
+    console.error('Backtest error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

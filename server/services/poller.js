@@ -5,6 +5,7 @@
 const { buildScannerSnapshot } = require('../routes/analysis');
 const { computeStrength } = require('./strength');
 const { pushScanner, pushStrength, pushAlert } = require('./priceStream');
+const journal = require('./journal');
 
 // Track previous sweep state per pair so we only fire alerts on transitions.
 // Shape: { [pair]: { highSwept: bool, lowSwept: bool } }
@@ -12,12 +13,15 @@ const sweepState = {};
 
 const SCANNER_INTERVAL_MS = 30 * 1000;        // 30s
 const STRENGTH_INTERVAL_MS = 60 * 1000;       // 60s
+const RESOLVER_INTERVAL_MS = 60 * 1000;       // 60s
 const FIRST_RUN_DELAY_MS = 2 * 1000;          // wait 2s after boot
 
 let scannerTimer = null;
 let strengthTimer = null;
+let resolverTimer = null;
 let scannerRunning = false;
 let strengthRunning = false;
+let resolverRunning = false;
 
 function detectSweepAlerts(snapshot) {
   for (const row of snapshot.results || []) {
@@ -98,19 +102,37 @@ async function tickStrength() {
   }
 }
 
+async function tickResolver() {
+  if (resolverRunning) return;
+  resolverRunning = true;
+  try {
+    const r = await journal.resolveOpenSignals();
+    if (r.resolved > 0) {
+      console.log(`[poller] journal resolved ${r.resolved}/${r.checked} open signals`);
+    }
+  } catch (err) {
+    console.error('[poller] resolver error:', err.message);
+  } finally {
+    resolverRunning = false;
+  }
+}
+
 function start() {
   console.log('[poller] starting background poller');
   setTimeout(() => {
     tickScanner();
     tickStrength();
+    tickResolver();
     scannerTimer = setInterval(tickScanner, SCANNER_INTERVAL_MS);
     strengthTimer = setInterval(tickStrength, STRENGTH_INTERVAL_MS);
+    resolverTimer = setInterval(tickResolver, RESOLVER_INTERVAL_MS);
   }, FIRST_RUN_DELAY_MS);
 }
 
 function stop() {
   clearInterval(scannerTimer);
   clearInterval(strengthTimer);
+  clearInterval(resolverTimer);
 }
 
 module.exports = { start, stop };

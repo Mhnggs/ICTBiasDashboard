@@ -17,6 +17,8 @@ import DxyBadge from './components/DxyBadge';
 import AlertsPanel from './components/AlertsPanel';
 import EconomicCalendar from './components/EconomicCalendar';
 import CorrelationMatrix from './components/CorrelationMatrix';
+import JournalPanel from './components/JournalPanel';
+import BacktestPanel from './components/BacktestPanel';
 
 function App() {
   const {
@@ -123,6 +125,12 @@ function App() {
           />
           <EconomicCalendar />
           <CorrelationMatrix />
+        </div>
+
+        {/* Journal + Backtest */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <JournalPanel />
+          <BacktestPanel />
         </div>
 
         {/* Main Grid */}
