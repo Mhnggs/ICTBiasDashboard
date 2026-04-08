@@ -9,6 +9,8 @@ export function usePriceStream() {
   const [prices, setPrices] = useState({});
   const [scanner, setScanner] = useState(null);
   const [strength, setStrength] = useState(null);
+  const [alerts, setAlerts] = useState([]); // newest first
+  const [latestAlert, setLatestAlert] = useState(null); // for toast trigger
   const [connected, setConnected] = useState(false);
   const wsRef = useRef(null);
   const reconnectRef = useRef(null);
@@ -61,6 +63,11 @@ export function usePriceStream() {
               pairsUsed: msg.pairsUsed,
               pairsTotal: msg.pairsTotal,
             });
+          } else if (msg.type === 'alerts-history') {
+            setAlerts(msg.alerts || []);
+          } else if (msg.type === 'alert' && msg.alert) {
+            setAlerts((prev) => [msg.alert, ...prev].slice(0, 50));
+            setLatestAlert(msg.alert);
           }
         } catch {
           // ignore
@@ -76,5 +83,5 @@ export function usePriceStream() {
     };
   }, []);
 
-  return { prices, scanner, strength, connected };
+  return { prices, scanner, strength, alerts, latestAlert, connected };
 }

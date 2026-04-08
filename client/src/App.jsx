@@ -14,6 +14,9 @@ import MTFBiasPanel from './components/MTFBiasPanel';
 import ScannerHeatmap from './components/ScannerHeatmap';
 import StrengthMeter from './components/StrengthMeter';
 import DxyBadge from './components/DxyBadge';
+import AlertsPanel from './components/AlertsPanel';
+import EconomicCalendar from './components/EconomicCalendar';
+import CorrelationMatrix from './components/CorrelationMatrix';
 
 function App() {
   const {
@@ -36,9 +39,12 @@ function App() {
     prices: livePrices,
     scanner: liveScanner,
     strength: liveStrength,
+    alerts,
+    latestAlert,
     connected: wsConnected,
   } = usePriceStream();
   const livePrice = data ? livePrices[data.pair] : null;
+  const handleSelectPair = (p) => { selectPair(p); fetchPair(p); };
 
   return (
     <div className="min-h-screen bg-bg-primary">
@@ -98,7 +104,7 @@ function App() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <div className="lg:col-span-2">
             <ScannerHeatmap
-              onSelectPair={(p) => { selectPair(p); fetchPair(p); }}
+              onSelectPair={handleSelectPair}
               liveSnapshot={liveScanner}
             />
           </div>
@@ -106,6 +112,17 @@ function App() {
             <DxyBadge pair={selectedPair} />
             <StrengthMeter liveSnapshot={liveStrength} />
           </div>
+        </div>
+
+        {/* Alerts + Calendar + Correlation */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <AlertsPanel
+            alerts={alerts}
+            latestAlert={latestAlert}
+            onSelectPair={handleSelectPair}
+          />
+          <EconomicCalendar />
+          <CorrelationMatrix />
         </div>
 
         {/* Main Grid */}

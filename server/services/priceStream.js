@@ -11,6 +11,8 @@ const clients = new Set();
 const lastPrices = new Map(); // symbol -> { price, timestamp }
 let lastScanner = null;       // most recent scanner snapshot
 let lastStrength = null;      // most recent strength snapshot
+const recentAlerts = [];      // ring buffer of last N alerts
+const MAX_ALERTS = 50;
 
 function broadcast(msg) {
   const json = JSON.stringify(msg);
@@ -27,6 +29,13 @@ function pushScanner(snapshot) {
 function pushStrength(snapshot) {
   lastStrength = snapshot;
   broadcast({ type: 'strength', ...snapshot });
+}
+
+function pushAlert(alert) {
+  recentAlerts.unshift(alert);
+  if (recentAlerts.length > MAX_ALERTS) recentAlerts.length = MAX_ALERTS;
+  console.log(`[priceStream] ALERT: ${alert.message}`);
+  broadcast({ type: 'alert', alert });
 }
 
 function connectUpstream() {
@@ -98,6 +107,10 @@ function attach(server) {
     }
     if (lastScanner) ws.send(JSON.stringify({ type: 'scanner', ...lastScanner }));
     if (lastStrength) ws.send(JSON.stringify({ type: 'strength', ...lastStrength }));
+    // Replay recent alerts so the alerts panel hydrates on connect
+    if (recentAlerts.length) {
+      ws.send(JSON.stringify({ type: 'alerts-history', alerts: recentAlerts }));
+    }
     ws.send(JSON.stringify({ type: 'status', upstream: upstreamReady }));
     ws.on('close', () => {
       clients.delete(ws);
@@ -108,4 +121,4 @@ function attach(server) {
   connectUpstream();
 }
 
-module.exports = { attach, pushScanner, pushStrength };
+module.exports = { attach, pushScanner, pushStrength, pushAlert };

@@ -4,6 +4,8 @@ const { fetchPairData, getCacheStatus, getATR, getQuote } = require('../services
 const { runAnalysis } = require('../services/analysis');
 const { getSessionInfo } = require('../services/session');
 const { computeStrength } = require('../services/strength');
+const { fetchCalendar } = require('../services/economicCalendar');
+const { computeCorrelation } = require('../services/correlation');
 const { SUPPORTED_PAIRS, sleep } = require('../utils/helpers');
 
 router.get('/analyze/:pair', async (req, res) => {
@@ -158,6 +160,30 @@ router.get('/strength', async (req, res) => {
     res.json(data);
   } catch (err) {
     console.error('Strength error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/calendar', async (req, res) => {
+  try {
+    const hoursAhead = parseInt(req.query.hours || '48', 10);
+    const minImportance = parseInt(req.query.minImportance || '2', 10);
+    const data = await fetchCalendar({ hoursAhead, minImportance });
+    res.json(data);
+  } catch (err) {
+    console.error('Calendar error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/correlation', async (req, res) => {
+  try {
+    const interval = req.query.interval || '1h';
+    const lookback = parseInt(req.query.lookback || '50', 10);
+    const data = await computeCorrelation({ interval, lookback });
+    res.json(data);
+  } catch (err) {
+    console.error('Correlation error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });
