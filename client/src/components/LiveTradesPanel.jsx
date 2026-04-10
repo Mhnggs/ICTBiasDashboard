@@ -53,6 +53,14 @@ export default function LiveTradesPanel({ livePrices, wsSymbol, switchSymbol }) 
     return () => clearInterval(pollRef.current);
   }, [loadSnapshot, loadAll, showClosed]);
 
+  // Auto-switch WS to the first open trade's pair on load
+  useEffect(() => {
+    const firstOpen = trades.find(t => t.status === 'open');
+    if (firstOpen && switchSymbol && firstOpen.pair !== wsSymbol) {
+      switchSymbol(firstOpen.pair);
+    }
+  }, [trades.length > 0 && trades.find(t => t.status === 'open')?.pair]); // eslint-disable-line
+
   // Merge live WS prices into trade snapshots for real-time updates
   const enrichedTrades = trades.map((t) => {
     if (t.status !== 'open') return t;
