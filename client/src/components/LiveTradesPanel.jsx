@@ -49,7 +49,7 @@ export default function LiveTradesPanel({ livePrices, wsSymbol, switchSymbol }) 
     if (showClosed) { loadAll(); return; }
     setLoading(true);
     loadSnapshot().finally(() => setLoading(false));
-    pollRef.current = setInterval(loadSnapshot, 5000);
+    pollRef.current = setInterval(loadSnapshot, 3000);
     return () => clearInterval(pollRef.current);
   }, [loadSnapshot, loadAll, showClosed]);
 

@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { fetchPairData, getCacheStatus, getATR, getRealTimePrice } = require('../services/twelveData');
+const { fetchPairData, getCacheStatus, getATR, getRealTimePrice, setActivePricePairs } = require('../services/twelveData');
 const { runAnalysis } = require('../services/analysis');
 const { getSessionInfo } = require('../services/session');
 const { computeStrength } = require('../services/strength');
@@ -257,9 +257,10 @@ router.get('/trades/snapshot', async (req, res) => {
     // Get real-time prices only for pairs with open trades (fast, 15s cache)
     const openTrades = liveTrades.getOpenTrades();
     const tradePairs = [...new Set(openTrades.map(t => t.pair))];
+    setActivePricePairs(tradePairs.length);
 
     const prices = {};
-    // Fetch real-time prices in parallel for open trade pairs
+    // Fetch real-time prices sequentially to respect rate limits
     await Promise.all(tradePairs.map(async (pair) => {
       const price = await getRealTimePrice(pair);
       if (price != null) prices[pair] = price;

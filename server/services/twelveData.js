@@ -153,15 +153,25 @@ function getCacheStatus() {
   return { entries: cache.size, active };
 }
 
-// Fast price cache — 15s TTL, only for /price endpoint.
-// Used by the live trade tracker to get near-realtime prices without
-// burning through the full candle/quote cache.
+// Fast price cache for /price endpoint.
+// TTL scales with the number of pairs being tracked so we stay
+// under the 8 calls/min rate limit (Grow plan).
+//   1 pair → 8s (≈7.5/min),  2 pairs → 16s (≈7.5/min),  3+ → 20s+
 const priceCache = new Map();
-const PRICE_CACHE_TTL = 15 * 1000;
+let activePricePairs = 1;
+
+function priceCacheTtl() {
+  return Math.max(8000, activePricePairs * 8000);
+}
+
+function setActivePricePairs(n) {
+  activePricePairs = Math.max(1, n);
+}
 
 async function getRealTimePrice(symbol) {
+  const ttl = priceCacheTtl();
   const cached = priceCache.get(symbol);
-  if (cached && Date.now() - cached.ts < PRICE_CACHE_TTL) {
+  if (cached && Date.now() - cached.ts < ttl) {
     return cached.price;
   }
   try {
@@ -193,4 +203,5 @@ module.exports = {
   getDeepHistory,
   getCacheStatus,
   getRealTimePrice,
+  setActivePricePairs,
 };
