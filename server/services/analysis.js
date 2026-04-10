@@ -1,6 +1,6 @@
 const { getPipValue, priceToPips, formatPrice } = require('../utils/helpers');
 const { isInsideKillzone } = require('./session');
-const { ema, sma, rsi, macd } = require('../utils/indicators');
+const { ema, sma, rsi, macd, detectRsiDivergence } = require('../utils/indicators');
 
 // ---------- INDICATOR-BASED BIAS PER TIMEFRAME ----------
 function analyzeTimeframe(candles, label) {
@@ -50,6 +50,23 @@ function analyzeTimeframe(candles, label) {
     else { bear++; factors.push({ name: 'MACD bearish cross', bullish: false }); }
   }
 
+  // 6. RSI Divergence (skip 5m — too noisy)
+  let divergence = { bearish: false, bullish: false, details: null };
+  if (label !== '5m') {
+    divergence = detectRsiDivergence(candles, 14, label === '4H' ? 3 : 5);
+  }
+  // Divergence acts as a warning factor: if bias is bullish but bearish div
+  // detected, add a bearish factor (and vice versa). This naturally reduces
+  // the alignment count, flagging momentum exhaustion.
+  if (divergence.bearish) {
+    bear++;
+    factors.push({ name: `RSI bearish divergence`, bullish: false, warning: true });
+  }
+  if (divergence.bullish) {
+    bull++;
+    factors.push({ name: `RSI bullish divergence`, bullish: true, warning: true });
+  }
+
   let bias = 'NEUTRAL';
   if (bull >= 4) bias = 'BULLISH';
   else if (bear >= 4) bias = 'BEARISH';
@@ -62,6 +79,7 @@ function analyzeTimeframe(candles, label) {
     score: bias === 'BULLISH' ? bull : bias === 'BEARISH' ? bear : 0,
     bullCount: bull,
     bearCount: bear,
+    divergence,
     indicators: {
       price,
       ema20,

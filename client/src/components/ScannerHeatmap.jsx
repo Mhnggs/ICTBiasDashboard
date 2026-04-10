@@ -91,6 +91,7 @@ export default function ScannerHeatmap({ onSelectPair, liveSnapshot }) {
                 <th key={tf} className="font-medium px-2">{tf}</th>
               ))}
               <th className="font-medium px-2">Overall</th>
+              <th className="font-medium px-2">RSI Div</th>
               <th className="font-medium px-2">Asia Sweep</th>
             </tr>
           </thead>
@@ -100,11 +101,15 @@ export default function ScannerHeatmap({ onSelectPair, liveSnapshot }) {
                 return (
                   <tr key={r.pair}>
                     <td className="px-2 font-mono text-text-primary">{r.pair}</td>
-                    <td colSpan={6} className="px-2 text-bear">{r.error}</td>
+                    <td colSpan={8} className="px-2 text-bear">{r.error}</td>
                   </tr>
                 );
               }
               const tfMap = Object.fromEntries((r.timeframes || []).map(t => [t.label, t]));
+              // Collect divergences across timeframes (exclude 5m)
+              const divTfs = (r.timeframes || []).filter(t => t.label !== '5m' && (t.divergence?.bearish || t.divergence?.bullish));
+              const hasBearDiv = divTfs.some(t => t.divergence?.bearish);
+              const hasBullDiv = divTfs.some(t => t.divergence?.bullish);
               const sweepText = !r.asian?.complete
                 ? 'forming'
                 : r.bias === 'BEARISH'
@@ -146,6 +151,24 @@ export default function ScannerHeatmap({ onSelectPair, liveSnapshot }) {
                       {r.bias}
                     </span>
                   </td>
+                  <td className="px-2 text-center">
+                    {(hasBearDiv || hasBullDiv) ? (
+                      <span className={`inline-block text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        hasBearDiv && hasBullDiv
+                          ? 'bg-warn/15 text-warn border border-warn/30'
+                          : hasBearDiv
+                            ? 'bg-bear/15 text-bear border border-bear/30'
+                            : 'bg-bull/15 text-bull border border-bull/30'
+                      }`}>
+                        {hasBearDiv && hasBullDiv ? 'B+B' : hasBearDiv ? 'BEAR' : 'BULL'}
+                        <span className="text-[8px] ml-0.5 opacity-70">
+                          {divTfs.map(t => t.label).join(',')}
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="text-text-muted/40 text-[11px]">—</span>
+                    )}
+                  </td>
                   <td className={`px-2 text-[11px] whitespace-nowrap ${sweepClass}`}>
                     {sweepText}
                   </td>
@@ -153,7 +176,7 @@ export default function ScannerHeatmap({ onSelectPair, liveSnapshot }) {
               );
             })}
             {!rows.length && !loading && (
-              <tr><td colSpan={7} className="px-2 py-6 text-center text-text-muted">No data yet</td></tr>
+              <tr><td colSpan={9} className="px-2 py-6 text-center text-text-muted">No data yet</td></tr>
             )}
           </tbody>
         </table>
