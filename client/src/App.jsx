@@ -111,7 +111,7 @@ function App() {
             />
           </div>
           <div className="lg:col-span-1 space-y-4">
-            <DxyBadge pair={selectedPair} />
+            <DxyBadge pair={selectedPair} strength={liveStrength} />
             <StrengthMeter liveSnapshot={liveStrength} />
           </div>
         </div>

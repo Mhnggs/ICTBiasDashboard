@@ -1,72 +1,82 @@
-const { getEconomicCalendar } = require('./twelveData');
+// Economic calendar via ForexFactory's free weekly JSON feed.
+// Twelve Data doesn't expose an economic calendar endpoint, and FF's feed is
+// the de-facto industry standard: no auth, refreshed nightly, includes all
+// major events with impact levels. Docs/source: https://www.forexfactory.com
 
-// Currencies relevant to the 6 forex pairs we trade
+const axios = require('axios');
+
+const FF_URL = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+const FF_NEXT_URL = 'https://nfs.faireconomy.media/ff_calendar_nextweek.json';
+
 const RELEVANT_CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'NZD'];
 
-// Map currencies to their event country codes (TD uses ISO country names)
-// TD's economic_calendar uses country full name in `country` field.
-function isRelevantCurrency(c) {
-  return RELEVANT_CURRENCIES.includes((c || '').toUpperCase());
+// FF feed fields: title, country (3-letter currency code), date (ISO),
+// impact ('High'|'Medium'|'Low'|'Holiday'|'Non-Economic'),
+// forecast, previous, url.
+function mapImpact(impact) {
+  if (!impact) return 0;
+  const s = String(impact).toLowerCase();
+  if (s.startsWith('high')) return 3;
+  if (s.startsWith('medium')) return 2;
+  if (s.startsWith('low')) return 1;
+  return 0; // Holiday / Non-Economic
 }
 
-function normaliseImportance(raw) {
-  // TD returns importance as number 0-3 or string. Normalise to 1..3
-  const n = parseInt(raw, 10);
-  if (!isNaN(n)) return Math.max(1, Math.min(3, n));
-  if (typeof raw === 'string') {
-    if (/high/i.test(raw)) return 3;
-    if (/medium/i.test(raw)) return 2;
-    if (/low/i.test(raw)) return 1;
-  }
-  return 1;
+// Simple in-memory cache to avoid hammering FF on every poll
+let cache = null;
+let cacheAt = 0;
+const CACHE_TTL = 30 * 60 * 1000; // 30 min
+
+async function fetchFFJson(url) {
+  const res = await axios.get(url, { timeout: 15000 });
+  return Array.isArray(res.data) ? res.data : [];
 }
 
 async function fetchCalendar({ hoursAhead = 48, minImportance = 2 } = {}) {
-  const now = new Date();
-  const end = new Date(now.getTime() + hoursAhead * 3600 * 1000);
+  const now = Date.now();
+  let rawEvents;
+  if (cache && now - cacheAt < CACHE_TTL) {
+    rawEvents = cache;
+  } else {
+    const [thisWeek, nextWeek] = await Promise.all([
+      fetchFFJson(FF_URL).catch(() => []),
+      fetchFFJson(FF_NEXT_URL).catch(() => []),
+    ]);
+    rawEvents = [...thisWeek, ...nextWeek];
+    cache = rawEvents;
+    cacheAt = now;
+  }
 
-  const startDate = now.toISOString().slice(0, 10);
-  const endDate = end.toISOString().slice(0, 10);
+  const horizonMs = hoursAhead * 3600 * 1000;
+  const windowStart = now - 30 * 60 * 1000; // include events from 30m ago
+  const windowEnd = now + horizonMs;
 
-  const raw = await getEconomicCalendar({
-    start_date: startDate,
-    end_date: endDate,
-  });
-
-  // TD response shape: { status, data: [...] } or values array — handle both.
-  const events = raw?.data || raw?.values || raw || [];
-  const list = Array.isArray(events) ? events : [];
-
-  const out = list
+  const events = rawEvents
     .map((e) => {
-      const importance = normaliseImportance(e.importance);
-      // Build datetime — TD provides `date` and `time` separately for some plans
-      let dt = null;
-      if (e.datetime) dt = new Date(e.datetime);
-      else if (e.date && e.time) dt = new Date(`${e.date}T${e.time}Z`);
-      else if (e.date) dt = new Date(e.date);
+      const dt = e.date ? new Date(e.date).getTime() : null;
       return {
-        title: e.event || e.title || e.indicator || 'Event',
-        currency: (e.currency || e.currency_code || '').toUpperCase(),
+        title: e.title || 'Event',
+        currency: (e.country || e.currency || '').toUpperCase(),
         country: e.country,
-        importance,
+        importance: mapImpact(e.impact),
         actual: e.actual ?? null,
         forecast: e.forecast ?? null,
         previous: e.previous ?? null,
-        datetime: dt ? dt.toISOString() : null,
-        timestampMs: dt ? dt.getTime() : null,
+        datetime: dt ? new Date(dt).toISOString() : null,
+        timestampMs: dt,
       };
     })
-    .filter((e) => e.timestampMs && e.timestampMs >= now.getTime() - 30 * 60 * 1000) // include events from 30min ago
-    .filter((e) => e.timestampMs <= end.getTime())
-    .filter((e) => isRelevantCurrency(e.currency))
+    .filter((e) => e.timestampMs != null)
+    .filter((e) => e.timestampMs >= windowStart && e.timestampMs <= windowEnd)
+    .filter((e) => RELEVANT_CURRENCIES.includes(e.currency))
     .filter((e) => e.importance >= minImportance)
     .sort((a, b) => a.timestampMs - b.timestampMs);
 
   return {
-    fetchedAt: now.toISOString(),
+    fetchedAt: new Date().toISOString(),
     horizonHours: hoursAhead,
-    events: out,
+    source: 'forexfactory',
+    events,
   };
 }
 

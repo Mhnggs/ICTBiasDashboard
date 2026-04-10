@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { fetchPairData, getCacheStatus, getATR, getQuote } = require('../services/twelveData');
+const { fetchPairData, getCacheStatus, getATR } = require('../services/twelveData');
 const { runAnalysis } = require('../services/analysis');
 const { getSessionInfo } = require('../services/session');
 const { computeStrength } = require('../services/strength');
@@ -131,26 +131,6 @@ router.get('/atr/:pair', async (req, res) => {
     const latest = data.values?.[0];
     const atr = latest ? parseFloat(latest.atr) : null;
     res.json({ pair, interval, period, atr, datetime: latest?.datetime });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.get('/dxy', async (req, res) => {
-  try {
-    const q = await getQuote('DXY');
-    const close = parseFloat(q.close ?? q.price);
-    const prev = parseFloat(q.previous_close);
-    const change = isFinite(close) && isFinite(prev) ? close - prev : null;
-    const pct = change != null && prev ? (change / prev) * 100 : null;
-    res.json({
-      symbol: 'DXY',
-      price: close,
-      previousClose: prev,
-      change,
-      pct,
-      direction: change == null ? 'flat' : change > 0 ? 'up' : change < 0 ? 'down' : 'flat',
-    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

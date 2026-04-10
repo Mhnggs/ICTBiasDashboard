@@ -94,13 +94,6 @@ async function getATR(symbol, interval = '1h', timePeriod = 14) {
   return apiCall('/atr', { symbol, interval, time_period: timePeriod, outputsize: 1 });
 }
 
-// Twelve Data Economic Calendar.
-// Optional params: country (CSV), importance (1|2|3 = low/medium/high),
-// start_date, end_date (ISO date strings).
-async function getEconomicCalendar(params = {}) {
-  return apiCall('/economic_calendar', params);
-}
-
 async function getPrice(symbol) {
   return apiCall('/price', { symbol });
 }
@@ -162,7 +155,6 @@ module.exports = {
   getPrice,
   getQuote,
   getATR,
-  getEconomicCalendar,
   getDeepHistory,
   getCacheStatus,
 };
