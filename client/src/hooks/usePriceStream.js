@@ -1,17 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-// Subscribes to server WS and exposes:
-//  - prices: { [symbol]: { price, timestamp, bid, ask, prev } }
-//  - scanner: latest scanner snapshot pushed from server
-//  - strength: latest strength snapshot pushed from server
-//  - connected: WS state
 export function usePriceStream() {
   const [prices, setPrices] = useState({});
   const [scanner, setScanner] = useState(null);
   const [strength, setStrength] = useState(null);
-  const [alerts, setAlerts] = useState([]); // newest first
-  const [latestAlert, setLatestAlert] = useState(null); // for toast trigger
+  const [alerts, setAlerts] = useState([]);
+  const [latestAlert, setLatestAlert] = useState(null);
   const [connected, setConnected] = useState(false);
+  const [wsSymbol, setWsSymbol] = useState('EUR/USD');
   const wsRef = useRef(null);
   const reconnectRef = useRef(null);
 
@@ -21,7 +17,6 @@ export function usePriceStream() {
     const connect = () => {
       if (cancelled) return;
       const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      // In dev, bypass Vite's flaky ws proxy and hit the backend directly.
       const host = import.meta.env.DEV
         ? `${window.location.hostname}:3001`
         : window.location.host;
@@ -68,10 +63,10 @@ export function usePriceStream() {
           } else if (msg.type === 'alert' && msg.alert) {
             setAlerts((prev) => [msg.alert, ...prev].slice(0, 50));
             setLatestAlert(msg.alert);
+          } else if (msg.type === 'ws-symbol') {
+            setWsSymbol(msg.symbol);
           }
-        } catch {
-          // ignore
-        }
+        } catch { /* ignore */ }
       };
     };
 
@@ -83,5 +78,12 @@ export function usePriceStream() {
     };
   }, []);
 
-  return { prices, scanner, strength, alerts, latestAlert, connected };
+  // Send a message to the server WS to switch the streamed symbol
+  const switchSymbol = useCallback((symbol) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ action: 'switch-symbol', symbol }));
+    }
+  }, []);
+
+  return { prices, scanner, strength, alerts, latestAlert, connected, wsSymbol, switchSymbol };
 }

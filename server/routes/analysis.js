@@ -8,6 +8,7 @@ const { fetchCalendar } = require('../services/economicCalendar');
 const { computeCorrelation } = require('../services/correlation');
 const journal = require('../services/journal');
 const liveTrades = require('../services/liveTrades');
+const { switchSymbol, getActiveSymbol } = require('../services/priceStream');
 const { runBacktest } = require('../services/backtest');
 const { SUPPORTED_PAIRS, sleep } = require('../utils/helpers');
 
@@ -223,6 +224,21 @@ router.get('/session', (req, res) => {
 
 router.get('/cache-status', (req, res) => {
   res.json(getCacheStatus());
+});
+
+// ─── WebSocket Symbol ───
+
+router.get('/ws-symbol', (req, res) => {
+  res.json({ symbol: getActiveSymbol() });
+});
+
+router.post('/ws-symbol', (req, res) => {
+  const { symbol } = req.body;
+  if (!symbol || !SUPPORTED_PAIRS.includes(symbol)) {
+    return res.status(400).json({ error: `Invalid symbol. Supported: ${SUPPORTED_PAIRS.join(', ')}` });
+  }
+  switchSymbol(symbol);
+  res.json({ symbol, success: true });
 });
 
 // ─── Live Trades ───

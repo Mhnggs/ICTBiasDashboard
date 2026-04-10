@@ -42,6 +42,8 @@ function App() {
     alerts,
     latestAlert,
     connected: wsConnected,
+    wsSymbol,
+    switchSymbol,
   } = usePriceStream();
   const livePrice = data ? livePrices[data.pair] : null;
   const handleSelectPair = (p) => { selectPair(p); fetchPair(p); };
@@ -128,7 +130,7 @@ function App() {
         </div>
 
         {/* ────── Live Trades ────── */}
-        <LiveTradesPanel livePrices={livePrices} />
+        <LiveTradesPanel livePrices={livePrices} wsSymbol={wsSymbol} switchSymbol={switchSymbol} />
 
         {/* ────── Journal ────── */}
         <JournalPanel />

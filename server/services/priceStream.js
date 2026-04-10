@@ -7,11 +7,12 @@ let upstream = null;
 let upstreamReady = false;
 let reconnectTimer = null;
 let heartbeatTimer = null;
+let currentSymbol = 'EUR/USD'; // The one symbol we stream (Grow plan = 1 WS symbol)
 const clients = new Set();
-const lastPrices = new Map(); // symbol -> { price, timestamp }
-let lastScanner = null;       // most recent scanner snapshot
-let lastStrength = null;      // most recent strength snapshot
-const recentAlerts = [];      // ring buffer of last N alerts
+const lastPrices = new Map();
+let lastScanner = null;
+let lastStrength = null;
+const recentAlerts = [];
 const MAX_ALERTS = 50;
 
 function broadcast(msg) {
@@ -38,21 +39,51 @@ function pushAlert(alert) {
   broadcast({ type: 'alert', alert });
 }
 
+// Switch the upstream WS to a different symbol
+function switchSymbol(symbol) {
+  if (!SUPPORTED_PAIRS.includes(symbol)) return;
+  if (symbol === currentSymbol) return;
+
+  const oldSymbol = currentSymbol;
+  currentSymbol = symbol;
+  console.log(`[priceStream] Switching WS: ${oldSymbol} -> ${symbol}`);
+
+  if (upstream && upstreamReady) {
+    // Unsubscribe old, subscribe new
+    upstream.send(JSON.stringify({
+      action: 'unsubscribe',
+      params: { symbols: oldSymbol },
+    }));
+    upstream.send(JSON.stringify({
+      action: 'subscribe',
+      params: { symbols: symbol },
+    }));
+  }
+
+  // Notify clients of the switch
+  broadcast({ type: 'ws-symbol', symbol: currentSymbol });
+}
+
+function getActiveSymbol() {
+  return currentSymbol;
+}
+
 function connectUpstream() {
   const apiKey = process.env.TWELVE_DATA_API_KEY;
   if (!apiKey) {
     console.warn('[priceStream] No API key, upstream disabled');
     return;
   }
-  console.log('[priceStream] Connecting to Twelve Data WS...');
+  console.log(`[priceStream] Connecting to Twelve Data WS for ${currentSymbol}...`);
   upstream = new WebSocket(`${TD_WS_URL}?apikey=${apiKey}`);
 
   upstream.on('open', () => {
     upstreamReady = true;
     console.log('[priceStream] Upstream connected');
+    // Subscribe to just the current symbol (Grow plan = 1 symbol)
     upstream.send(JSON.stringify({
       action: 'subscribe',
-      params: { symbols: SUPPORTED_PAIRS.join(',') },
+      params: { symbols: currentSymbol },
     }));
     clearInterval(heartbeatTimer);
     heartbeatTimer = setInterval(() => {
@@ -101,17 +132,27 @@ function attach(server) {
   wss.on('connection', (ws) => {
     clients.add(ws);
     console.log(`[priceStream] Client connected (${clients.size} total)`);
-    // Send last known prices immediately
     for (const tick of lastPrices.values()) {
       ws.send(JSON.stringify(tick));
     }
     if (lastScanner) ws.send(JSON.stringify({ type: 'scanner', ...lastScanner }));
     if (lastStrength) ws.send(JSON.stringify({ type: 'strength', ...lastStrength }));
-    // Replay recent alerts so the alerts panel hydrates on connect
     if (recentAlerts.length) {
       ws.send(JSON.stringify({ type: 'alerts-history', alerts: recentAlerts }));
     }
+    ws.send(JSON.stringify({ type: 'ws-symbol', symbol: currentSymbol }));
     ws.send(JSON.stringify({ type: 'status', upstream: upstreamReady }));
+
+    // Listen for symbol switch requests from the client
+    ws.on('message', (raw) => {
+      try {
+        const msg = JSON.parse(raw.toString());
+        if (msg.action === 'switch-symbol' && msg.symbol) {
+          switchSymbol(msg.symbol);
+        }
+      } catch { /* ignore */ }
+    });
+
     ws.on('close', () => {
       clients.delete(ws);
       console.log(`[priceStream] Client disconnected (${clients.size} total)`);
@@ -121,4 +162,4 @@ function attach(server) {
   connectUpstream();
 }
 
-module.exports = { attach, pushScanner, pushStrength, pushAlert };
+module.exports = { attach, pushScanner, pushStrength, pushAlert, switchSymbol, getActiveSymbol };

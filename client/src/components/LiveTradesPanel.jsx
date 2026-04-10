@@ -10,7 +10,7 @@ function suggestionStyle(type) {
   return 'bg-accent/10 text-accent border-accent/25';
 }
 
-export default function LiveTradesPanel({ livePrices }) {
+export default function LiveTradesPanel({ livePrices, wsSymbol, switchSymbol }) {
   const [trades, setTrades] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [showClosed, setShowClosed] = useState(false);
@@ -91,6 +91,10 @@ export default function LiveTradesPanel({ livePrices }) {
     setSubmitting(true);
     try {
       await axios.post('/api/trades', form);
+      // Auto-switch WS stream to this trade's pair for real-time ticks
+      if (switchSymbol && form.pair !== wsSymbol) {
+        switchSymbol(form.pair);
+      }
       setForm(f => ({ ...f, entry_price: '', sl_price: '', tp_price: '', notes: '' }));
       setShowForm(false);
       loadSnapshot();
@@ -145,6 +149,12 @@ export default function LiveTradesPanel({ livePrices }) {
           {openTrades.length > 0 && (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/30">
               {openTrades.length}
+            </span>
+          )}
+          {wsSymbol && (
+            <span className="text-[9px] font-mono text-text-muted px-1.5 py-0.5 rounded bg-bg-primary border border-border flex items-center gap-1">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-bull animate-pulse" />
+              WS: {wsSymbol}
             </span>
           )}
         </div>
@@ -240,7 +250,9 @@ export default function LiveTradesPanel({ livePrices }) {
         )}
 
         {openTrades.map((t) => (
-          <TradeCard key={t.id} trade={t} onClose={handleClose} onDelete={handleDelete} />
+          <TradeCard key={t.id} trade={t} onClose={handleClose} onDelete={handleDelete}
+            isStreaming={t.pair === wsSymbol}
+            onStream={() => switchSymbol?.(t.pair)} />
         ))}
 
         {/* Closed trades (when toggled) */}
@@ -259,7 +271,7 @@ export default function LiveTradesPanel({ livePrices }) {
   );
 }
 
-function TradeCard({ trade: t, onClose, onDelete }) {
+function TradeCard({ trade: t, onClose, onDelete, isStreaming, onStream }) {
   const live = t.live;
   const isProfit = live ? live.pnlUsd >= 0 : false;
   const pnlColor = !live ? 'text-text-muted' : isProfit ? 'text-bull' : 'text-bear';
@@ -345,8 +357,16 @@ function TradeCard({ trade: t, onClose, onDelete }) {
 
       {/* Row 5: actions */}
       <div className="flex items-center justify-between pt-1 border-t border-border/50">
-        {t.notes && <span className="text-[9px] text-text-muted truncate max-w-[60%]">{t.notes}</span>}
+        {t.notes && <span className="text-[9px] text-text-muted truncate max-w-[50%]">{t.notes}</span>}
         <div className="flex items-center gap-2 ml-auto">
+          {!isStreaming && (
+            <button
+              onClick={onStream}
+              className="text-[10px] px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/25 hover:bg-accent/20"
+            >
+              Stream
+            </button>
+          )}
           <button
             onClick={() => onClose(t.id, t.pair)}
             className="text-[10px] px-2 py-0.5 rounded bg-warn/15 text-warn border border-warn/30 hover:bg-warn/25"
