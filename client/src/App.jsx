@@ -7,8 +7,6 @@ import KeyLevels from './components/KeyLevels';
 import Checklist from './components/Checklist';
 import AnalysisBox from './components/AnalysisBox';
 import CandlestickChart from './components/CandlestickChart';
-import SessionTimeline from './components/SessionTimeline';
-import KillzoneStatus from './components/KillzoneStatus';
 import RiskCalculator from './components/RiskCalculator';
 import MTFBiasPanel from './components/MTFBiasPanel';
 import ScannerHeatmap from './components/ScannerHeatmap';
@@ -50,11 +48,13 @@ function App() {
 
   return (
     <div className="min-h-screen bg-bg-primary">
+      {/* Header with integrated session timeline */}
       <Header session={session} />
 
-      <main className="max-w-[1440px] mx-auto px-4 sm:px-6 py-4 space-y-4">
+      <main className="max-w-[1440px] mx-auto px-4 sm:px-6 py-5 space-y-5">
+
         {/* Pair Selector */}
-        <div className="bg-bg-card border border-border rounded-xl p-4">
+        <div className="glass rounded-2xl border border-border-subtle p-5 card-glow">
           <PairSelector
             pairs={pairs}
             selectedPair={selectedPair}
@@ -65,17 +65,17 @@ function App() {
             allData={allData}
             lastFetch={lastFetch}
           />
-          <div className="flex items-center gap-2 mt-3">
-            <label className="flex items-center gap-2 text-xs text-text-muted cursor-pointer">
+          <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border-subtle">
+            <label className="flex items-center gap-2 text-xs text-text-muted cursor-pointer font-medium">
               <input
                 type="checkbox"
                 checked={autoRefresh}
                 onChange={(e) => setAutoRefresh(e.target.checked)}
-                className="accent-accent"
+                className="accent-accent w-3.5 h-3.5"
               />
               Auto-refresh (5 min)
             </label>
-            <span className="flex items-center gap-1.5 text-xs text-text-muted ml-3">
+            <span className="flex items-center gap-1.5 text-xs text-text-muted font-medium">
               <span className={`inline-block w-2 h-2 rounded-full ${wsConnected ? 'bg-bull animate-pulse' : 'bg-bear'}`} />
               {wsConnected ? 'Live stream' : 'Stream offline'}
             </span>
@@ -84,40 +84,40 @@ function App() {
 
         {/* Error */}
         {error && (
-          <div className="bg-bear/10 border border-bear/30 rounded-xl p-4 text-bear text-sm">
+          <div className="glass rounded-2xl border border-bear/30 p-5 text-bear text-sm font-semibold">
             {error}
           </div>
         )}
 
         {/* Loading */}
         {loading && (
-          <div className="bg-bg-card border border-border rounded-xl p-8 flex items-center justify-center">
+          <div className="glass rounded-2xl border border-border-subtle p-10 flex items-center justify-center">
             <div className="flex items-center gap-3 text-text-secondary">
-              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24" fill="none">
+              <svg className="animate-spin h-5 w-5 text-accent" viewBox="0 0 24 24" fill="none">
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              <span className="text-sm">Fetching data from Twelve Data API...</span>
+              <span className="text-sm font-medium">Fetching data from Twelve Data API...</span>
             </div>
           </div>
         )}
 
-        {/* Scanner + Strength + DXY — always visible (live via WS) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* ────── Scanner + Strength + USD ────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2">
             <ScannerHeatmap
               onSelectPair={handleSelectPair}
               liveSnapshot={liveScanner}
             />
           </div>
-          <div className="lg:col-span-1 space-y-4">
+          <div className="lg:col-span-1 space-y-5">
             <DxyBadge pair={selectedPair} strength={liveStrength} />
             <StrengthMeter liveSnapshot={liveStrength} />
           </div>
         </div>
 
-        {/* Alerts + Calendar + Correlation */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* ────── Alerts + Calendar + Correlation ────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <AlertsPanel
             alerts={alerts}
             latestAlert={latestAlert}
@@ -127,17 +127,17 @@ function App() {
           <CorrelationMatrix />
         </div>
 
-        {/* Journal + Backtest */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* ────── Journal + Backtest ────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <JournalPanel />
           <BacktestPanel />
         </div>
 
-        {/* Main Grid */}
+        {/* ────── Pair Detail ────── */}
         {data && (
-          <div className="fade-in space-y-4">
+          <div className="fade-in space-y-5">
             {/* Top row: Bias + Levels + Checklist */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <BiasCard data={data} livePrice={livePrice} />
               <KeyLevels levels={data.levels} pair={data.pair} />
               <Checklist items={data.checklist} />
@@ -150,7 +150,7 @@ function App() {
               bias={data.bias}
             />
 
-            {/* Analysis Box */}
+            {/* Analysis */}
             <AnalysisBox analysis={data.analysis} />
 
             {/* Chart */}
@@ -159,35 +159,35 @@ function App() {
               levels={data.levels}
             />
 
-            {/* Bottom row: Session + Risk */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-1">
-                <SessionTimeline session={session} />
-              </div>
-              <div className="md:col-span-1">
-                <KillzoneStatus session={session} />
-              </div>
-              <div className="md:col-span-1">
-                <RiskCalculator pair={selectedPair} />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Empty state when no data and not loading */}
-        {!data && !loading && !error && (
-          <div className="space-y-4">
-            <div className="bg-bg-card border border-border rounded-xl p-12 flex flex-col items-center justify-center text-center">
-              <p className="text-text-muted text-sm mb-2">Select a pair and click "Fetch Bias" to start analysis</p>
-              <p className="text-text-muted text-xs">The dashboard will fetch live data from Twelve Data API and run SMC analysis</p>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <SessionTimeline session={session} />
-              <KillzoneStatus session={session} />
+            {/* Risk Calculator */}
+            <div className="max-w-md">
               <RiskCalculator pair={selectedPair} />
             </div>
           </div>
         )}
+
+        {/* Empty state */}
+        {!data && !loading && !error && (
+          <div className="space-y-5">
+            <div className="glass rounded-2xl border border-border-subtle p-16 flex flex-col items-center justify-center text-center slide-up">
+              <div className="w-12 h-12 rounded-xl bg-accent/15 border border-accent/25 flex items-center justify-center mb-4">
+                <span className="text-accent-bright text-lg font-black">?</span>
+              </div>
+              <p className="text-text-secondary text-sm font-semibold mb-1">Select a pair and click "Fetch Bias"</p>
+              <p className="text-text-muted text-xs">Live data from Twelve Data API with multi-timeframe SMC analysis</p>
+            </div>
+            <div className="max-w-md">
+              <RiskCalculator pair={selectedPair} />
+            </div>
+          </div>
+        )}
+
+        {/* Footer */}
+        <footer className="text-center py-6 border-t border-border-subtle mt-4">
+          <p className="text-[11px] text-text-muted/50 font-medium tracking-wider uppercase">
+            ICT Bias Dashboard &middot; Smart Money Concepts
+          </p>
+        </footer>
       </main>
     </div>
   );
