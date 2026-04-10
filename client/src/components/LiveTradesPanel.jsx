@@ -1,0 +1,379 @@
+import { useEffect, useState, useCallback, useRef } from 'react';
+import axios from 'axios';
+
+const PAIRS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'GBP/JPY', 'AUD/USD', 'NZD/USD'];
+
+function suggestionStyle(type) {
+  if (type === 'warning') return 'bg-bear/10 text-bear border-bear/25';
+  if (type === 'caution') return 'bg-warn/10 text-warn border-warn/25';
+  if (type === 'action') return 'bg-bull/10 text-bull border-bull/25';
+  return 'bg-accent/10 text-accent border-accent/25';
+}
+
+export default function LiveTradesPanel({ livePrices }) {
+  const [trades, setTrades] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [showClosed, setShowClosed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const pollRef = useRef(null);
+
+  // Form state
+  const [form, setForm] = useState({
+    pair: 'EUR/USD', direction: 'LONG',
+    entry_price: '', sl_price: '', tp_price: '',
+    lot_size: '0.01', notes: '',
+  });
+
+  const loadSnapshot = useCallback(async () => {
+    try {
+      const res = await axios.get('/api/trades/snapshot');
+      setTrades(res.data.trades || []);
+    } catch {
+      // Fall back to basic list
+      try {
+        const res = await axios.get('/api/trades');
+        setTrades(res.data.trades || []);
+      } catch { /* ignore */ }
+    }
+  }, []);
+
+  const loadAll = useCallback(async () => {
+    try {
+      const res = await axios.get('/api/trades?all=1');
+      setTrades(res.data.trades || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (showClosed) { loadAll(); return; }
+    setLoading(true);
+    loadSnapshot().finally(() => setLoading(false));
+    pollRef.current = setInterval(loadSnapshot, 15000);
+    return () => clearInterval(pollRef.current);
+  }, [loadSnapshot, loadAll, showClosed]);
+
+  // Merge live WS prices into trade snapshots for real-time updates
+  const enrichedTrades = trades.map((t) => {
+    if (t.status !== 'open') return t;
+    const wsPrice = livePrices?.[t.pair]?.price;
+    if (!wsPrice || !t.live) return t;
+    // Recalculate with WS price (more real-time than polling)
+    const pip = t.pair.includes('JPY') ? 0.01 : 0.0001;
+    const pnlRaw = t.direction === 'LONG' ? wsPrice - t.entry_price : t.entry_price - wsPrice;
+    const pnlPips = pnlRaw / pip;
+    const risk = Math.abs(t.entry_price - t.sl_price);
+    const rMultiple = risk > 0 ? pnlRaw / risk : 0;
+    const tpDist = Math.abs(t.tp_price - t.entry_price);
+    const slDist = Math.abs(t.sl_price - t.entry_price);
+    const progress = pnlRaw >= 0
+      ? (tpDist > 0 ? pnlRaw / tpDist : 0)
+      : -(Math.abs(pnlRaw) / (slDist || 1));
+    return {
+      ...t,
+      live: {
+        ...t.live,
+        currentPrice: wsPrice,
+        pnlPips: Math.round(pnlPips * 10) / 10,
+        rMultiple: Math.round(rMultiple * 100) / 100,
+        progress: Math.round(progress * 1000) / 1000,
+      },
+    };
+  });
+
+  const openTrades = enrichedTrades.filter(t => t.status === 'open');
+  const closedTrades = enrichedTrades.filter(t => t.status !== 'open');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await axios.post('/api/trades', form);
+      setForm(f => ({ ...f, entry_price: '', sl_price: '', tp_price: '', notes: '' }));
+      setShowForm(false);
+      loadSnapshot();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to add trade');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleClose = async (id, pair) => {
+    const price = livePrices?.[pair]?.price;
+    const input = prompt('Exit price:', price || '');
+    if (!input) return;
+    try {
+      await axios.post(`/api/trades/${id}/close`, { exit_price: parseFloat(input) });
+      loadSnapshot();
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed');
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('Delete this trade?')) return;
+    try {
+      await axios.delete(`/api/trades/${id}`);
+      loadSnapshot();
+    } catch { /* ignore */ }
+  };
+
+  // Compute form R:R preview
+  const formRR = (() => {
+    const e = parseFloat(form.entry_price);
+    const s = parseFloat(form.sl_price);
+    const t = parseFloat(form.tp_price);
+    if (!e || !s || !t) return null;
+    const risk = Math.abs(e - s);
+    const reward = Math.abs(t - e);
+    return risk > 0 ? (reward / risk).toFixed(1) : null;
+  })();
+
+  return (
+    <div className="rounded-xl bg-bg-card border border-border p-5">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2.5">
+          <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wider">
+            Live Trades
+          </h3>
+          {openTrades.length > 0 && (
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/30">
+              {openTrades.length}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowClosed(v => !v)}
+            className="text-[10px] px-2 py-0.5 rounded bg-bg-primary border border-border text-text-muted hover:text-text-primary"
+          >
+            {showClosed ? 'Open only' : 'Show all'}
+          </button>
+          <button
+            onClick={() => setShowForm(v => !v)}
+            className="text-xs px-2.5 py-1 rounded-md bg-accent/20 border border-accent/40 text-accent hover:bg-accent/30 font-semibold"
+          >
+            {showForm ? 'Cancel' : '+ Trade'}
+          </button>
+        </div>
+      </div>
+
+      {/* Add Trade Form */}
+      {showForm && (
+        <form onSubmit={handleSubmit} className="mb-4 p-3 rounded-lg border border-border bg-bg-primary/40 space-y-2.5">
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={form.pair}
+              onChange={e => setForm(f => ({ ...f, pair: e.target.value }))}
+              className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-primary"
+            >
+              {PAIRS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <select
+              value={form.direction}
+              onChange={e => setForm(f => ({ ...f, direction: e.target.value }))}
+              className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-primary"
+            >
+              <option value="LONG">LONG</option>
+              <option value="SHORT">SHORT</option>
+            </select>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <input
+              type="number" step="any" required placeholder="Entry"
+              value={form.entry_price}
+              onChange={e => setForm(f => ({ ...f, entry_price: e.target.value }))}
+              className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-primary font-mono placeholder:text-text-muted/50"
+            />
+            <input
+              type="number" step="any" required placeholder="SL"
+              value={form.sl_price}
+              onChange={e => setForm(f => ({ ...f, sl_price: e.target.value }))}
+              className="bg-bg-primary border border-bear/30 rounded px-2 py-1.5 text-xs text-text-primary font-mono placeholder:text-text-muted/50"
+            />
+            <input
+              type="number" step="any" required placeholder="TP"
+              value={form.tp_price}
+              onChange={e => setForm(f => ({ ...f, tp_price: e.target.value }))}
+              className="bg-bg-primary border border-bull/30 rounded px-2 py-1.5 text-xs text-text-primary font-mono placeholder:text-text-muted/50"
+            />
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <input
+              type="number" step="any" placeholder="Lots"
+              value={form.lot_size}
+              onChange={e => setForm(f => ({ ...f, lot_size: e.target.value }))}
+              className="bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-primary font-mono placeholder:text-text-muted/50"
+            />
+            <input
+              type="text" placeholder="Notes (optional)" className="col-span-2 bg-bg-primary border border-border rounded px-2 py-1.5 text-xs text-text-primary placeholder:text-text-muted/50"
+              value={form.notes}
+              onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+            />
+          </div>
+          <div className="flex items-center justify-between">
+            {formRR && (
+              <span className="text-[10px] text-text-muted font-mono">R:R = 1:{formRR}</span>
+            )}
+            <button
+              type="submit" disabled={submitting}
+              className="ml-auto text-xs px-3 py-1.5 rounded-md bg-accent text-bg-primary font-bold hover:bg-accent-bright disabled:opacity-50"
+            >
+              {submitting ? 'Adding...' : 'Add Trade'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Open Trades */}
+      <div className="space-y-2">
+        {!openTrades.length && !loading && !showClosed && (
+          <div className="text-[11px] text-text-muted py-4 text-center">
+            No open trades. Click "+ Trade" to track a position.
+          </div>
+        )}
+
+        {openTrades.map((t) => (
+          <TradeCard key={t.id} trade={t} onClose={handleClose} onDelete={handleDelete} />
+        ))}
+
+        {/* Closed trades (when toggled) */}
+        {showClosed && closedTrades.length > 0 && (
+          <>
+            <div className="text-[10px] text-text-muted uppercase tracking-wider pt-2 border-t border-border mt-2">
+              Closed
+            </div>
+            {closedTrades.map((t) => (
+              <ClosedTradeRow key={t.id} trade={t} onDelete={handleDelete} />
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TradeCard({ trade: t, onClose, onDelete }) {
+  const live = t.live;
+  const isProfit = live ? live.pnlPips >= 0 : false;
+  const pnlColor = !live ? 'text-text-muted' : isProfit ? 'text-bull' : 'text-bear';
+
+  // Progress bar: maps -1 (SL) to 0%, 0 (entry) to 50%, +1 (TP) to 100%
+  const pct = live ? Math.min(Math.max((live.progress + 1) / 2 * 100, 0), 100) : 50;
+  const barColor = !live ? 'bg-text-muted/30' : isProfit ? 'bg-bull' : 'bg-bear';
+
+  return (
+    <div className="rounded-lg border border-border bg-bg-primary/30 p-3 space-y-2">
+      {/* Row 1: pair, direction, R, pnl */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm text-text-primary font-semibold">{t.pair}</span>
+          <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
+            t.direction === 'LONG' ? 'bg-bull/15 text-bull' : 'bg-bear/15 text-bear'
+          }`}>
+            {t.direction}
+          </span>
+          <span className="text-[10px] text-text-muted font-mono">{t.lot_size} lot</span>
+        </div>
+        <div className="flex items-center gap-2">
+          {live && (
+            <span className={`font-mono text-sm font-bold ${pnlColor}`}>
+              {live.pnlPips > 0 ? '+' : ''}{live.pnlPips} pips
+              <span className="text-[10px] ml-1 opacity-70">
+                ({live.rMultiple > 0 ? '+' : ''}{live.rMultiple}R)
+              </span>
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Row 2: progress bar SL → Entry → TP */}
+      <div className="space-y-1">
+        <div className="h-1.5 w-full rounded-full bg-bg-primary/80 overflow-hidden relative">
+          {/* Entry marker at 50% */}
+          <div className="absolute left-1/2 top-0 w-px h-full bg-text-muted/40 -translate-x-1/2" />
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-[9px] font-mono text-text-muted">
+          <span className="text-bear">SL {t.sl_price}</span>
+          <span>Entry {t.entry_price}</span>
+          <span className="text-bull">TP {t.tp_price}</span>
+        </div>
+      </div>
+
+      {/* Row 3: live price + distance */}
+      {live && (
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="text-text-muted">
+            Now: <span className={`font-mono font-semibold ${pnlColor}`}>{live.currentPrice}</span>
+          </span>
+          <span className="text-text-muted font-mono">
+            <span className="text-bear">{live.distToSl}p to SL</span>
+            {' / '}
+            <span className="text-bull">{live.distToTp}p to TP</span>
+          </span>
+        </div>
+      )}
+
+      {/* Row 4: suggestions */}
+      {live?.suggestions?.length > 0 && (
+        <div className="space-y-1">
+          {live.suggestions.map((s, i) => (
+            <div key={i} className={`text-[10px] px-2 py-1 rounded border ${suggestionStyle(s.type)}`}>
+              {s.text}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Row 5: actions */}
+      <div className="flex items-center justify-between pt-1 border-t border-border/50">
+        {t.notes && <span className="text-[9px] text-text-muted truncate max-w-[60%]">{t.notes}</span>}
+        <div className="flex items-center gap-2 ml-auto">
+          <button
+            onClick={() => onClose(t.id, t.pair)}
+            className="text-[10px] px-2 py-0.5 rounded bg-warn/15 text-warn border border-warn/30 hover:bg-warn/25"
+          >
+            Close
+          </button>
+          <button
+            onClick={() => onDelete(t.id)}
+            className="text-[10px] px-2 py-0.5 rounded bg-bear/10 text-bear/70 border border-bear/20 hover:bg-bear/20"
+          >
+            Del
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ClosedTradeRow({ trade: t, onDelete }) {
+  const isWin = (t.pnl_pips || 0) > 0;
+  return (
+    <div className="flex items-center justify-between px-2 py-1.5 rounded-md border border-border bg-bg-primary/20">
+      <div className="flex items-center gap-2 min-w-0">
+        <span className="font-mono text-[11px] text-text-primary font-semibold">{t.pair}</span>
+        <span className={`text-[9px] uppercase ${t.direction === 'LONG' ? 'text-bull' : 'text-bear'}`}>
+          {t.direction}
+        </span>
+        <span className={`text-[10px] font-mono font-bold ${isWin ? 'text-bull' : 'text-bear'}`}>
+          {t.pnl_pips > 0 ? '+' : ''}{t.pnl_pips}p ({t.pnl_r > 0 ? '+' : ''}{t.pnl_r}R)
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded border ${
+          isWin ? 'bg-bull/20 text-bull border-bull/40' : 'bg-bear/20 text-bear border-bear/40'
+        }`}>
+          {t.status.replace('closed_', '')}
+        </span>
+        <button onClick={() => onDelete(t.id)} className="text-[9px] text-text-muted hover:text-bear">x</button>
+      </div>
+    </div>
+  );
+}

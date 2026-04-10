@@ -17,6 +17,7 @@ import EconomicCalendar from './components/EconomicCalendar';
 import CorrelationMatrix from './components/CorrelationMatrix';
 import JournalPanel from './components/JournalPanel';
 import BacktestPanel from './components/BacktestPanel';
+import LiveTradesPanel from './components/LiveTradesPanel';
 
 function App() {
   const {
@@ -126,6 +127,9 @@ function App() {
           <EconomicCalendar />
           <CorrelationMatrix />
         </div>
+
+        {/* ────── Live Trades ────── */}
+        <LiveTradesPanel livePrices={livePrices} />
 
         {/* ────── Journal + Backtest ────── */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">

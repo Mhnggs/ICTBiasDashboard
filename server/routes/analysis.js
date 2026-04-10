@@ -7,6 +7,7 @@ const { computeStrength } = require('../services/strength');
 const { fetchCalendar } = require('../services/economicCalendar');
 const { computeCorrelation } = require('../services/correlation');
 const journal = require('../services/journal');
+const liveTrades = require('../services/liveTrades');
 const { runBacktest } = require('../services/backtest');
 const { SUPPORTED_PAIRS, sleep } = require('../utils/helpers');
 
@@ -106,6 +107,7 @@ async function buildScannerRow(pair) {
         bias: tf.bias,
         bullCount: tf.bullCount,
         bearCount: tf.bearCount,
+        divergence: tf.divergence || null,
       })),
       asian: {
         high: r.asian.high,
@@ -221,6 +223,89 @@ router.get('/session', (req, res) => {
 
 router.get('/cache-status', (req, res) => {
   res.json(getCacheStatus());
+});
+
+// ─── Live Trades ───
+
+router.get('/trades', (req, res) => {
+  try {
+    const all = req.query.all === '1';
+    res.json({ trades: all ? liveTrades.getAllTrades(50) : liveTrades.getOpenTrades() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/trades/snapshot', async (req, res) => {
+  try {
+    // Build price map + analysis map from cached data for smart exit suggestions
+    const prices = {};
+    const analysisMap = {};
+    for (const pair of SUPPORTED_PAIRS) {
+      try {
+        const data = await fetchPairData(pair);
+        prices[pair] = data.currentPrice;
+        const result = runAnalysis(
+          pair, data.candles4H, data.candles1H, data.candles30m, data.candles15m,
+          data.currentPrice,
+          { todayHigh: data.todayHigh, todayLow: data.todayLow, todayOpen: data.todayOpen },
+          data.candles5m
+        );
+        analysisMap[pair] = { bias: result.bias, levels: result.levels, timeframes: result.timeframes };
+      } catch { /* skip pairs without cached data */ }
+    }
+    const snapshot = liveTrades.computeLiveSnapshot(prices, analysisMap);
+    res.json({ trades: snapshot });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/trades', (req, res) => {
+  try {
+    const { pair, direction, entry_price, sl_price, tp_price, lot_size, notes } = req.body;
+    if (!pair || !direction || !entry_price || !sl_price || !tp_price) {
+      return res.status(400).json({ error: 'Missing required fields: pair, direction, entry_price, sl_price, tp_price' });
+    }
+    if (!SUPPORTED_PAIRS.includes(pair)) {
+      return res.status(400).json({ error: `Unsupported pair: ${pair}` });
+    }
+    const id = liveTrades.addTrade({
+      pair,
+      direction,
+      entry_price: parseFloat(entry_price),
+      sl_price: parseFloat(sl_price),
+      tp_price: parseFloat(tp_price),
+      lot_size: parseFloat(lot_size || 0.01),
+      notes,
+    });
+    res.json({ id, success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/trades/:id/close', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const { exit_price } = req.body;
+    if (!exit_price) return res.status(400).json({ error: 'exit_price required' });
+    const result = liveTrades.closeTrade(id, parseFloat(exit_price));
+    if (!result) return res.status(404).json({ error: 'Trade not found or already closed' });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.delete('/trades/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    liveTrades.deleteTrade(id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;
