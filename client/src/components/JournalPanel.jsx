@@ -149,7 +149,7 @@ function TradeReview({ review, trade }) {
       {/* Summary row */}
       <div className="flex flex-wrap gap-2 text-[10px]">
         <span className={`font-bold px-2 py-0.5 rounded ${review.outcome === 'WIN' ? 'bg-bull/15 text-bull' : 'bg-bear/15 text-bear'}`}>
-          {review.outcome} {review.pnlR > 0 ? '+' : ''}{review.pnlR}R ({review.pnlPips > 0 ? '+' : ''}{review.pnlPips} pips)
+          {review.outcome} {review.pnlUsd != null ? `${review.pnlUsd >= 0 ? '+' : '-'}$${Math.abs(review.pnlUsd).toFixed(2)}` : ''} ({review.pnlR > 0 ? '+' : ''}{review.pnlR}R)
         </span>
         <span className="text-text-muted px-2 py-0.5 rounded bg-bg-primary border border-border">
           Hold: {review.holdTime}

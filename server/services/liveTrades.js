@@ -6,6 +6,16 @@ const path = require('path');
 const fs = require('fs');
 const { getPipValue, priceToPips, formatPrice } = require('../utils/helpers');
 
+// Pip value in USD per standard lot (100k units).
+// USD-quote pairs: 1 pip = $10 per lot.
+// JPY pairs: 1 pip ≈ $10000 * 0.01 / rate. We use the current price to compute.
+function pipValueUsd(pair, currentPrice) {
+  const isJpy = pair.includes('JPY');
+  if (!isJpy) return 10; // $10 per pip per standard lot
+  // For JPY pairs: pip value = (0.01 / currentPrice) * 100000
+  return currentPrice > 0 ? (0.01 / currentPrice) * 100000 : 6.5;
+}
+
 const DB_PATH = path.resolve(__dirname, '../../data/journal.db');
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
 
@@ -79,10 +89,13 @@ function generateTradeReview(trade, exitPrice, analysisData) {
   const pnlR = risk > 0 ? pnlRaw / risk : 0;
   const plannedRR = risk > 0 ? reward / risk : 0;
   const isWin = pnlRaw > 0;
+  const pvUsd = pipValueUsd(trade.pair, exitPrice);
+  const pnlUsd = pnlPips * pvUsd * trade.lot_size;
 
   const review = {
     outcome: isWin ? 'WIN' : 'LOSS',
     pnlPips: Math.round(pnlPips * 10) / 10,
+    pnlUsd: Math.round(pnlUsd * 100) / 100,
     pnlR: Math.round(pnlR * 100) / 100,
     plannedRR: Math.round(plannedRR * 10) / 10,
     holdTime: null,
@@ -305,6 +318,10 @@ function computeLiveSnapshot(prices, analysisMap = {}) {
       ? (trade.tp_price - currentPrice) / pip
       : (currentPrice - trade.tp_price) / pip;
 
+    // $ P&L: pips * pipValueUsd * lots (lot_size is in standard lots)
+    const pvUsd = pipValueUsd(trade.pair, currentPrice);
+    const pnlUsd = pnlPips * pvUsd * trade.lot_size;
+
     const suggestions = [];
     const analysis = analysisMap[trade.pair];
 
@@ -357,6 +374,7 @@ function computeLiveSnapshot(prices, analysisMap = {}) {
         progress: Math.round(progress * 1000) / 1000,
         distToSl: Math.round(distToSl * 10) / 10,
         distToTp: Math.round(distToTp * 10) / 10,
+        pnlUsd: Math.round(pnlUsd * 100) / 100,
         suggestions,
       },
     };

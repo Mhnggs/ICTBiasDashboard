@@ -49,7 +49,7 @@ export default function LiveTradesPanel({ livePrices }) {
     if (showClosed) { loadAll(); return; }
     setLoading(true);
     loadSnapshot().finally(() => setLoading(false));
-    pollRef.current = setInterval(loadSnapshot, 15000);
+    pollRef.current = setInterval(loadSnapshot, 5000);
     return () => clearInterval(pollRef.current);
   }, [loadSnapshot, loadAll, showClosed]);
 
@@ -58,10 +58,11 @@ export default function LiveTradesPanel({ livePrices }) {
     if (t.status !== 'open') return t;
     const wsPrice = livePrices?.[t.pair]?.price;
     if (!wsPrice || !t.live) return t;
-    // Recalculate with WS price (more real-time than polling)
     const pip = t.pair.includes('JPY') ? 0.01 : 0.0001;
+    const pvUsd = t.pair.includes('JPY') ? (wsPrice > 0 ? (0.01 / wsPrice) * 100000 : 6.5) : 10;
     const pnlRaw = t.direction === 'LONG' ? wsPrice - t.entry_price : t.entry_price - wsPrice;
     const pnlPips = pnlRaw / pip;
+    const pnlUsd = pnlPips * pvUsd * t.lot_size;
     const risk = Math.abs(t.entry_price - t.sl_price);
     const rMultiple = risk > 0 ? pnlRaw / risk : 0;
     const tpDist = Math.abs(t.tp_price - t.entry_price);
@@ -75,6 +76,7 @@ export default function LiveTradesPanel({ livePrices }) {
         ...t.live,
         currentPrice: wsPrice,
         pnlPips: Math.round(pnlPips * 10) / 10,
+        pnlUsd: Math.round(pnlUsd * 100) / 100,
         rMultiple: Math.round(rMultiple * 100) / 100,
         progress: Math.round(progress * 1000) / 1000,
       },
@@ -100,7 +102,9 @@ export default function LiveTradesPanel({ livePrices }) {
   };
 
   const handleClose = async (id, pair) => {
-    const price = livePrices?.[pair]?.price;
+    // Try WS price first, then snapshot price
+    const trade = enrichedTrades.find(t => t.id === id);
+    const price = livePrices?.[pair]?.price || trade?.live?.currentPrice;
     const input = prompt('Exit price:', price || '');
     if (!input) return;
     try {
@@ -257,16 +261,21 @@ export default function LiveTradesPanel({ livePrices }) {
 
 function TradeCard({ trade: t, onClose, onDelete }) {
   const live = t.live;
-  const isProfit = live ? live.pnlPips >= 0 : false;
+  const isProfit = live ? live.pnlUsd >= 0 : false;
   const pnlColor = !live ? 'text-text-muted' : isProfit ? 'text-bull' : 'text-bear';
 
-  // Progress bar: maps -1 (SL) to 0%, 0 (entry) to 50%, +1 (TP) to 100%
   const pct = live ? Math.min(Math.max((live.progress + 1) / 2 * 100, 0), 100) : 50;
   const barColor = !live ? 'bg-text-muted/30' : isProfit ? 'bg-bull' : 'bg-bear';
 
+  const fmtUsd = (v) => {
+    if (v == null) return '--';
+    const abs = Math.abs(v);
+    return `${v >= 0 ? '+' : '-'}$${abs < 1000 ? abs.toFixed(2) : abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
   return (
     <div className="rounded-lg border border-border bg-bg-primary/30 p-3 space-y-2">
-      {/* Row 1: pair, direction, R, pnl */}
+      {/* Row 1: pair, direction, $ pnl */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="font-mono text-sm text-text-primary font-semibold">{t.pair}</span>
@@ -280,9 +289,12 @@ function TradeCard({ trade: t, onClose, onDelete }) {
         <div className="flex items-center gap-2">
           {live && (
             <span className={`font-mono text-sm font-bold ${pnlColor}`}>
-              {live.pnlPips > 0 ? '+' : ''}{live.pnlPips} pips
-              <span className="text-[10px] ml-1 opacity-70">
-                ({live.rMultiple > 0 ? '+' : ''}{live.rMultiple}R)
+              {fmtUsd(live.pnlUsd)}
+              <span className="text-[10px] ml-1.5 opacity-60">
+                {live.rMultiple > 0 ? '+' : ''}{live.rMultiple}R
+              </span>
+              <span className="text-[10px] ml-1 opacity-40">
+                {live.pnlPips > 0 ? '+' : ''}{live.pnlPips}p
               </span>
             </span>
           )}
@@ -354,7 +366,9 @@ function TradeCard({ trade: t, onClose, onDelete }) {
 }
 
 function ClosedTradeRow({ trade: t, onDelete }) {
-  const isWin = (t.pnl_pips || 0) > 0;
+  const isWin = (t.pnl_r || 0) > 0;
+  const pnlUsd = t.analysis?.pnlUsd;
+  const fmtUsd = (v) => v != null ? `${v >= 0 ? '+' : '-'}$${Math.abs(v).toFixed(2)}` : '';
   return (
     <div className="flex items-center justify-between px-2 py-1.5 rounded-md border border-border bg-bg-primary/20">
       <div className="flex items-center gap-2 min-w-0">
@@ -363,7 +377,8 @@ function ClosedTradeRow({ trade: t, onDelete }) {
           {t.direction}
         </span>
         <span className={`text-[10px] font-mono font-bold ${isWin ? 'text-bull' : 'text-bear'}`}>
-          {t.pnl_pips > 0 ? '+' : ''}{t.pnl_pips}p ({t.pnl_r > 0 ? '+' : ''}{t.pnl_r}R)
+          {pnlUsd != null ? fmtUsd(pnlUsd) : `${t.pnl_pips > 0 ? '+' : ''}${t.pnl_pips}p`}
+          <span className="opacity-60 ml-1">({t.pnl_r > 0 ? '+' : ''}{t.pnl_r}R)</span>
         </span>
       </div>
       <div className="flex items-center gap-2">
