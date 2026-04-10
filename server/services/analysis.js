@@ -74,41 +74,59 @@ function analyzeTimeframe(candles, label) {
   };
 }
 
-// ---------- ASIAN RANGE (19:00-23:59 EST) ----------
+// ---------- ASIAN RANGE (18:00-23:59 EST / 6 PM - midnight NY) ----------
+// Twelve Data candle datetimes are in America/New_York (set in the API call).
+// The 1H candle stamped "18:00" covers 18:00–18:59, "23:00" covers 23:00–23:59.
+// Asian range = highest high & lowest low of candles with hour 18..23 on the
+// same calendar date (they all fall on one date since midnight isn't crossed).
 function detectAsianRange(candles1H) {
   if (!candles1H || candles1H.length < 5) {
     return { high: null, low: null, range: 0, highSwept: false, lowSwept: false, complete: false };
   }
 
+  // Tag each candle with its date and hour from the datetime string.
   const tagged = candles1H.map((c, idx) => {
-    const timePart = c.datetime.split(' ')[1] || '00:00:00';
+    const parts = c.datetime.split(' ');
+    const datePart = parts[0]; // e.g. "2026-04-09"
+    const timePart = parts[1] || '00:00:00';
     const hour = parseInt(timePart.split(':')[0], 10);
-    return { ...c, hour, idx, isAsian: hour >= 19 && hour <= 23 };
+    return { ...c, datePart, hour, idx, isAsian: hour >= 18 && hour <= 23 };
   });
 
-  let lastAsianIdx = -1;
-  for (let i = tagged.length - 1; i >= 0; i--) {
-    if (tagged[i].isAsian) { lastAsianIdx = i; break; }
+  // Group asian-hour candles by date so we don't mix different sessions.
+  const asianByDate = {};
+  for (const c of tagged) {
+    if (!c.isAsian) continue;
+    if (!asianByDate[c.datePart]) asianByDate[c.datePart] = [];
+    asianByDate[c.datePart].push(c);
   }
 
-  if (lastAsianIdx === -1) {
+  // Pick the most recent session date that has at least 3 candles (6h window
+  // should produce 6, but weekend gaps or partial data may give fewer).
+  const dates = Object.keys(asianByDate).sort();
+  if (!dates.length) {
     return { high: null, low: null, range: 0, highSwept: false, lowSwept: false, complete: false };
   }
 
-  const blockCandles = [];
-  for (let i = lastAsianIdx; i >= 0; i--) {
-    if (tagged[i].isAsian) blockCandles.unshift(tagged[i]);
-    else break;
-  }
+  let sessionDate = dates[dates.length - 1];
+  let blockCandles = asianByDate[sessionDate];
+
+  // If the most recent date has very few candles and there's a prior one with
+  // more, it may mean the latest session is still forming — that's fine, use it.
+  // But if it has only 1 candle we might be at the very start; still use it.
 
   const high = Math.max(...blockCandles.map(c => c.high));
   const low = Math.min(...blockCandles.map(c => c.low));
 
-  const hasClose = blockCandles.some(c => c.hour === 23);
-  const hasPostCandle = lastAsianIdx < tagged.length - 1;
-  const complete = hasClose && hasPostCandle;
+  // Session is complete when we have the 23:00 candle AND there exists at
+  // least one candle after the block (i.e. post-midnight data has arrived).
+  const has23 = blockCandles.some(c => c.hour === 23);
+  const lastBlockIdx = Math.max(...blockCandles.map(c => c.idx));
+  const hasPostCandle = lastBlockIdx < tagged.length - 1;
+  const complete = has23 && hasPostCandle;
 
-  const postCandles = tagged.slice(lastAsianIdx + 1);
+  // Check for sweeps: only look at candles AFTER the asian block.
+  const postCandles = tagged.filter(c => c.idx > lastBlockIdx);
   let highSwept = false, lowSwept = false;
   for (const c of postCandles) {
     if (c.high > high) highSwept = true;
@@ -120,8 +138,10 @@ function detectAsianRange(candles1H) {
     range: high - low,
     highSwept, lowSwept,
     complete,
+    sessionDate,
     sessionStart: blockCandles[0].datetime,
     sessionEnd: blockCandles[blockCandles.length - 1].datetime,
+    candleCount: blockCandles.length,
   };
 }
 

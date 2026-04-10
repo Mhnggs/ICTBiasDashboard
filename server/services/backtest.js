@@ -72,7 +72,7 @@ function buildAsianRanges(c1h) {
   const byDate = {};
   for (const c of c1h) {
     const h = hourOf(c.datetime);
-    if (h < 19 || h > 23) continue;
+    if (h < 18 || h > 23) continue;
     const date = dateOf(c.datetime);
     if (!byDate[date]) byDate[date] = [];
     byDate[date].push(c);
