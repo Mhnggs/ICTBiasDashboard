@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 
-const TF_ORDER = ['4H', '1H', '30m', '15m'];
+const TF_ORDER = ['4H', '1H', '30m', '15m', '5m'];
 
 function biasClasses(bias) {
   if (bias === 'BULLISH') return 'bg-bull/20 text-bull border-bull/40';

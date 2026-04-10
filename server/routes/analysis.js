@@ -25,7 +25,8 @@ router.get('/analyze/:pair', async (req, res) => {
       data.candles30m,
       data.candles15m,
       data.currentPrice,
-      { todayHigh: data.todayHigh, todayLow: data.todayLow, todayOpen: data.todayOpen }
+      { todayHigh: data.todayHigh, todayLow: data.todayLow, todayOpen: data.todayOpen },
+      data.candles5m
     );
     res.json(result);
   } catch (err) {
@@ -51,7 +52,8 @@ router.get('/analyze-all', async (req, res) => {
           data.candles30m,
           data.candles15m,
           data.currentPrice,
-          { todayHigh: data.todayHigh, todayLow: data.todayLow, todayOpen: data.todayOpen }
+          { todayHigh: data.todayHigh, todayLow: data.todayLow, todayOpen: data.todayOpen },
+          data.candles5m
         );
         results.push(result);
       } catch (err) {
@@ -89,7 +91,8 @@ async function buildScannerRow(pair) {
       data.candles30m,
       data.candles15m,
       data.currentPrice,
-      { todayHigh: data.todayHigh, todayLow: data.todayLow, todayOpen: data.todayOpen }
+      { todayHigh: data.todayHigh, todayLow: data.todayLow, todayOpen: data.todayOpen },
+      data.candles5m
     );
     return {
       pair,

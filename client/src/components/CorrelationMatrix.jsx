@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 
-const INTERVALS = ['15min', '30min', '1h', '4h'];
+const INTERVALS = ['5min', '15min', '30min', '1h', '4h'];
 
 // Map correlation [-1..1] to a background color string.
 function corrColor(v) {

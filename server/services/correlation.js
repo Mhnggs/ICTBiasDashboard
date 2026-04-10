@@ -43,6 +43,7 @@ async function computeCorrelation({ interval = '1h', lookback = 50 } = {}) {
       if (interval === '4h') candles = data.candles4H;
       else if (interval === '30min') candles = data.candles30m;
       else if (interval === '15min') candles = data.candles15m;
+      else if (interval === '5min') candles = data.candles5m;
       else candles = data.candles1H;
       const closes = candles.slice(-lookback).map((c) => c.close);
       seriesByPair[pair] = pctReturns(closes);

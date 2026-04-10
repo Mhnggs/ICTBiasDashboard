@@ -163,22 +163,22 @@ function aggregateSignal(timeframes) {
   if (bullCount === total) {
     bias = 'BULLISH';
     strength = 'STRONGEST';
-    strengthLabel = 'STRONGEST (4/4 aligned)';
+    strengthLabel = `STRONGEST (${total}/${total} aligned)`;
     confidence = 95;
   } else if (bearCount === total) {
     bias = 'BEARISH';
     strength = 'STRONGEST';
-    strengthLabel = 'STRONGEST (4/4 aligned)';
+    strengthLabel = `STRONGEST (${total}/${total} aligned)`;
     confidence = 95;
   } else if (bullCount === total - 1 && bearCount === 0) {
     bias = 'BULLISH';
     strength = 'STRONG';
-    strengthLabel = 'STRONG (3/4 aligned)';
+    strengthLabel = `STRONG (${bullCount}/${total} aligned)`;
     confidence = 80;
   } else if (bearCount === total - 1 && bullCount === 0) {
     bias = 'BEARISH';
     strength = 'STRONG';
-    strengthLabel = 'STRONG (3/4 aligned)';
+    strengthLabel = `STRONG (${bearCount}/${total} aligned)`;
     confidence = 80;
   } else if (bullCount >= total - 1) {
     bias = 'BULLISH';
@@ -269,13 +269,17 @@ function generateEntryPlan(pair, signal, asian, pdhl) {
 }
 
 // ---------- MAIN ----------
-function runAnalysis(pair, candles4H, candles1H, candles30m, candles15m, currentPrice, quoteHL = {}) {
+function runAnalysis(pair, candles4H, candles1H, candles30m, candles15m, currentPrice, quoteHL = {}, candles5m = null) {
   // Per-timeframe bias
   const tf4H = analyzeTimeframe(candles4H, '4H');
   const tf1H = analyzeTimeframe(candles1H, '1H');
   const tf30m = analyzeTimeframe(candles30m, '30m');
   const tf15m = analyzeTimeframe(candles15m, '15m');
   const timeframes = [tf4H, tf1H, tf30m, tf15m];
+  if (candles5m && candles5m.length >= 60) {
+    const tf5m = analyzeTimeframe(candles5m, '5m');
+    timeframes.push(tf5m);
+  }
 
   // Aggregate
   const signal = aggregateSignal(timeframes);
@@ -355,6 +359,7 @@ function runAnalysis(pair, candles4H, candles1H, candles30m, candles15m, current
     candles1H,
     candles30m,
     candles15m,
+    candles5m,
     timeframes,
     asian,
     pdhl,

@@ -105,6 +105,7 @@ async function fetchPairData(symbol) {
   const data1H = await getTimeSeries(symbol, '1h', 100);
   const data30 = await getTimeSeries(symbol, '30min', 100);
   const data15 = await getTimeSeries(symbol, '15min', 100);
+  const data5 = await getTimeSeries(symbol, '5min', 100);
   const quote = await getQuote(symbol);
 
   const parseCandles = (data) => (data.values || []).map(v => ({
@@ -120,6 +121,7 @@ async function fetchPairData(symbol) {
   const candles1H = parseCandles(data1H);
   const candles30m = parseCandles(data30);
   const candles15m = parseCandles(data15);
+  const candles5m = parseCandles(data5);
 
   const currentPrice = parseFloat(quote.close || quote.price);
   const previousClose = parseFloat(quote.previous_close || 0);
@@ -135,6 +137,7 @@ async function fetchPairData(symbol) {
     candles1H,
     candles30m,
     candles15m,
+    candles5m,
     currentPrice,
     previousClose,
     quote,
