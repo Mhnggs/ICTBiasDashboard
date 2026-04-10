@@ -61,15 +61,15 @@ export default function Header({ session }) {
         <div className="flex items-center justify-between h-14">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-accent/20 border border-accent/30 flex items-center justify-center">
-              <span className="text-accent-bright font-black text-sm">ICT</span>
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-accent-bright flex items-center justify-center shadow-lg shadow-accent/20">
+              <span className="text-white font-black text-[10px] tracking-tight">MhN</span>
             </div>
             <div>
               <h1 className="text-base font-bold text-text-primary tracking-tight leading-none">
-                Bias Dashboard
+                MhN's <span className="text-gradient">Panel</span>
               </h1>
               <p className="text-[10px] text-text-muted font-medium tracking-wider uppercase leading-none mt-0.5">
-                Smart Money Concepts
+                Forex &middot; SMC &middot; ICT
               </p>
             </div>
           </div>

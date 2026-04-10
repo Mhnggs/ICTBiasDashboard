@@ -146,20 +146,40 @@ export default function LiveTradesPanel({ livePrices, wsSymbol, switchSymbol }) 
     return risk > 0 ? (reward / risk).toFixed(1) : null;
   })();
 
+  const hasActive = openTrades.length > 0;
+
+  // Compute total open P&L
+  const totalPnl = openTrades.reduce((sum, t) => sum + (t.live?.pnlUsd || 0), 0);
+  const totalPnlStr = fmtUsd(totalPnl);
+
   return (
-    <div className="rounded-xl bg-bg-card border border-border p-5">
+    <div className={`rounded-2xl border p-5 transition-all duration-300 ${
+      hasActive
+        ? 'glass border-accent/30 shadow-lg shadow-accent/5 live-trade-active'
+        : 'bg-bg-card border-border'
+    }`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2.5">
-          <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wider">
+          {hasActive && (
+            <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+          )}
+          <h3 className={`font-semibold uppercase tracking-wider ${
+            hasActive ? 'text-sm text-text-primary' : 'text-xs text-text-muted'
+          }`}>
             Live Trades
           </h3>
-          {openTrades.length > 0 && (
+          {hasActive && (
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/30">
               {openTrades.length}
             </span>
           )}
-          {wsSymbol && (
+          {hasActive && (
+            <span className={`font-mono text-sm font-bold ${totalPnl >= 0 ? 'text-bull' : 'text-bear'}`}>
+              {totalPnlStr}
+            </span>
+          )}
+          {wsSymbol && hasActive && (
             <span className="text-[9px] font-mono text-text-muted px-1.5 py-0.5 rounded bg-bg-primary border border-border flex items-center gap-1">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-bull animate-pulse" />
               WS: {wsSymbol}
@@ -167,15 +187,21 @@ export default function LiveTradesPanel({ livePrices, wsSymbol, switchSymbol }) 
           )}
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowClosed(v => !v)}
-            className="text-[10px] px-2 py-0.5 rounded bg-bg-primary border border-border text-text-muted hover:text-text-primary"
-          >
-            {showClosed ? 'Open only' : 'Show all'}
-          </button>
+          {hasActive && (
+            <button
+              onClick={() => setShowClosed(v => !v)}
+              className="text-[10px] px-2 py-0.5 rounded bg-bg-primary border border-border text-text-muted hover:text-text-primary"
+            >
+              {showClosed ? 'Open only' : 'History'}
+            </button>
+          )}
           <button
             onClick={() => setShowForm(v => !v)}
-            className="text-xs px-2.5 py-1 rounded-md bg-accent/20 border border-accent/40 text-accent hover:bg-accent/30 font-semibold"
+            className={`text-xs px-2.5 py-1 rounded-md font-semibold ${
+              hasActive
+                ? 'bg-accent/20 border border-accent/40 text-accent hover:bg-accent/30'
+                : 'bg-accent text-white hover:bg-accent-bright'
+            }`}
           >
             {showForm ? 'Cancel' : '+ Trade'}
           </button>
@@ -250,10 +276,10 @@ export default function LiveTradesPanel({ livePrices, wsSymbol, switchSymbol }) 
       )}
 
       {/* Open Trades */}
-      <div className="space-y-2">
-        {!openTrades.length && !loading && !showClosed && (
-          <div className="text-[11px] text-text-muted py-4 text-center">
-            No open trades. Click "+ Trade" to track a position.
+      <div className={hasActive ? 'space-y-3' : 'space-y-2'}>
+        {!openTrades.length && !loading && !showClosed && !showForm && (
+          <div className="text-[11px] text-text-muted py-2 text-center">
+            No open trades &mdash; click <span className="text-accent font-semibold">+ Trade</span> to start tracking
           </div>
         )}
 
@@ -279,84 +305,92 @@ export default function LiveTradesPanel({ livePrices, wsSymbol, switchSymbol }) 
   );
 }
 
+function fmtUsd(v) {
+  if (v == null) return '--';
+  const abs = Math.abs(v);
+  return `${v >= 0 ? '+' : '-'}$${abs < 1000 ? abs.toFixed(2) : abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 function TradeCard({ trade: t, onClose, onDelete, isStreaming, onStream }) {
   const live = t.live;
   const isProfit = live ? live.pnlUsd >= 0 : false;
   const pnlColor = !live ? 'text-text-muted' : isProfit ? 'text-bull' : 'text-bear';
+  const pnlBg = !live ? '' : isProfit ? 'bg-bull/5' : 'bg-bear/5';
 
   const pct = live ? Math.min(Math.max((live.progress + 1) / 2 * 100, 0), 100) : 50;
   const barColor = !live ? 'bg-text-muted/30' : isProfit ? 'bg-bull' : 'bg-bear';
 
-  const fmtUsd = (v) => {
-    if (v == null) return '--';
-    const abs = Math.abs(v);
-    return `${v >= 0 ? '+' : '-'}$${abs < 1000 ? abs.toFixed(2) : abs.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  };
-
   return (
-    <div className="rounded-lg border border-border bg-bg-primary/30 p-3 space-y-2">
-      {/* Row 1: pair, direction, $ pnl */}
+    <div className={`rounded-xl border bg-bg-primary/40 p-4 space-y-3 transition-all duration-300 ${
+      isProfit ? 'border-bull/20' : live ? 'border-bear/20' : 'border-border'
+    }`}>
+      {/* Row 1: pair info + P&L */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-sm text-text-primary font-semibold">{t.pair}</span>
-          <span className={`text-[10px] font-bold uppercase px-1.5 py-0.5 rounded ${
-            t.direction === 'LONG' ? 'bg-bull/15 text-bull' : 'bg-bear/15 text-bear'
+        <div className="flex items-center gap-2.5">
+          <span className="font-mono text-base text-text-primary font-bold">{t.pair}</span>
+          <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-md ${
+            t.direction === 'LONG' ? 'bg-bull/15 text-bull border border-bull/25' : 'bg-bear/15 text-bear border border-bear/25'
           }`}>
             {t.direction}
           </span>
           <span className="text-[10px] text-text-muted font-mono">{t.lot_size} lot</span>
-        </div>
-        <div className="flex items-center gap-2">
-          {live && (
-            <span className={`font-mono text-sm font-bold ${pnlColor}`}>
-              {fmtUsd(live.pnlUsd)}
-              <span className="text-[10px] ml-1.5 opacity-60">
-                {live.rMultiple > 0 ? '+' : ''}{live.rMultiple}R
-              </span>
-              <span className="text-[10px] ml-1 opacity-40">
-                {live.pnlPips > 0 ? '+' : ''}{live.pnlPips}p
-              </span>
+          {isStreaming && (
+            <span className="flex items-center gap-1 text-[9px] text-bull font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-bull animate-pulse" /> LIVE
             </span>
           )}
         </div>
+        {live && (
+          <div className={`flex items-center gap-3 px-3 py-1.5 rounded-lg ${pnlBg}`}>
+            <span className={`font-mono text-lg font-bold ${pnlColor}`}>
+              {fmtUsd(live.pnlUsd)}
+            </span>
+            <div className="flex flex-col items-end">
+              <span className={`font-mono text-[10px] font-semibold ${pnlColor} opacity-70`}>
+                {live.rMultiple > 0 ? '+' : ''}{live.rMultiple}R
+              </span>
+              <span className="font-mono text-[9px] text-text-muted">
+                {live.pnlPips > 0 ? '+' : ''}{live.pnlPips} pips
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Row 2: progress bar SL → Entry → TP */}
-      <div className="space-y-1">
-        <div className="h-1.5 w-full rounded-full bg-bg-primary/80 overflow-hidden relative">
-          {/* Entry marker at 50% */}
-          <div className="absolute left-1/2 top-0 w-px h-full bg-text-muted/40 -translate-x-1/2" />
+      <div className="space-y-1.5">
+        <div className="h-2 w-full rounded-full bg-bg-primary overflow-hidden relative border border-border/50">
+          <div className="absolute left-1/2 top-0 w-px h-full bg-text-muted/30 -translate-x-1/2 z-10" />
           <div
-            className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+            className={`h-full rounded-full transition-all duration-500 ${barColor} opacity-80`}
             style={{ width: `${pct}%` }}
           />
         </div>
         <div className="flex justify-between text-[9px] font-mono text-text-muted">
-          <span className="text-bear">SL {t.sl_price}</span>
-          <span>Entry {t.entry_price}</span>
-          <span className="text-bull">TP {t.tp_price}</span>
+          <span className="text-bear/80">SL {t.sl_price}</span>
+          <span className="text-text-secondary font-semibold">Entry {t.entry_price}</span>
+          <span className="text-bull/80">TP {t.tp_price}</span>
         </div>
       </div>
 
       {/* Row 3: live price + distance */}
       {live && (
-        <div className="flex items-center justify-between text-[10px]">
+        <div className="flex items-center justify-between text-[10px] px-1">
           <span className="text-text-muted">
-            Now: <span className={`font-mono font-semibold ${pnlColor}`}>{live.currentPrice}</span>
+            Price: <span className={`font-mono font-bold text-[11px] ${pnlColor}`}>{live.currentPrice}</span>
           </span>
-          <span className="text-text-muted font-mono">
-            <span className="text-bear">{live.distToSl}p to SL</span>
-            {' / '}
-            <span className="text-bull">{live.distToTp}p to TP</span>
+          <span className="font-mono flex items-center gap-3">
+            <span className="text-bear/70">{live.distToSl}p to SL</span>
+            <span className="text-bull/70">{live.distToTp}p to TP</span>
           </span>
         </div>
       )}
 
       {/* Row 4: suggestions */}
       {live?.suggestions?.length > 0 && (
-        <div className="space-y-1">
+        <div className="space-y-1.5">
           {live.suggestions.map((s, i) => (
-            <div key={i} className={`text-[10px] px-2 py-1 rounded border ${suggestionStyle(s.type)}`}>
+            <div key={i} className={`text-[10px] px-2.5 py-1.5 rounded-md border ${suggestionStyle(s.type)}`}>
               {s.text}
             </div>
           ))}
@@ -364,26 +398,26 @@ function TradeCard({ trade: t, onClose, onDelete, isStreaming, onStream }) {
       )}
 
       {/* Row 5: actions */}
-      <div className="flex items-center justify-between pt-1 border-t border-border/50">
-        {t.notes && <span className="text-[9px] text-text-muted truncate max-w-[50%]">{t.notes}</span>}
+      <div className="flex items-center justify-between pt-2 border-t border-border/40">
+        {t.notes && <span className="text-[9px] text-text-muted truncate max-w-[50%] italic">{t.notes}</span>}
         <div className="flex items-center gap-2 ml-auto">
           {!isStreaming && (
             <button
               onClick={onStream}
-              className="text-[10px] px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/25 hover:bg-accent/20"
+              className="text-[10px] px-2.5 py-1 rounded-md bg-accent/10 text-accent border border-accent/25 hover:bg-accent/20 font-medium"
             >
               Stream
             </button>
           )}
           <button
             onClick={() => onClose(t.id, t.pair)}
-            className="text-[10px] px-2 py-0.5 rounded bg-warn/15 text-warn border border-warn/30 hover:bg-warn/25"
+            className="text-[10px] px-2.5 py-1 rounded-md bg-warn/15 text-warn border border-warn/30 hover:bg-warn/25 font-medium"
           >
-            Close
+            Close Trade
           </button>
           <button
             onClick={() => onDelete(t.id)}
-            className="text-[10px] px-2 py-0.5 rounded bg-bear/10 text-bear/70 border border-bear/20 hover:bg-bear/20"
+            className="text-[10px] px-2 py-1 rounded-md bg-bear/10 text-bear/60 border border-bear/20 hover:bg-bear/20"
           >
             Del
           </button>
@@ -396,7 +430,6 @@ function TradeCard({ trade: t, onClose, onDelete, isStreaming, onStream }) {
 function ClosedTradeRow({ trade: t, onDelete }) {
   const isWin = (t.pnl_r || 0) > 0;
   const pnlUsd = t.analysis?.pnlUsd;
-  const fmtUsd = (v) => v != null ? `${v >= 0 ? '+' : '-'}$${Math.abs(v).toFixed(2)}` : '';
   return (
     <div className="flex items-center justify-between px-2 py-1.5 rounded-md border border-border bg-bg-primary/20">
       <div className="flex items-center gap-2 min-w-0">

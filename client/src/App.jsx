@@ -7,7 +7,6 @@ import KeyLevels from './components/KeyLevels';
 import Checklist from './components/Checklist';
 import AnalysisBox from './components/AnalysisBox';
 import CandlestickChart from './components/CandlestickChart';
-import RiskCalculator from './components/RiskCalculator';
 import MTFBiasPanel from './components/MTFBiasPanel';
 import ScannerHeatmap from './components/ScannerHeatmap';
 import StrengthMeter from './components/StrengthMeter';
@@ -84,6 +83,9 @@ function App() {
           </div>
         </div>
 
+        {/* ────── Live Trades (pinned top when active) ────── */}
+        <LiveTradesPanel livePrices={livePrices} wsSymbol={wsSymbol} switchSymbol={switchSymbol} />
+
         {/* Error */}
         {error && (
           <div className="glass rounded-2xl border border-bear/30 p-5 text-bear text-sm font-semibold">
@@ -104,7 +106,13 @@ function App() {
           </div>
         )}
 
-        {/* ────── Scanner + Strength + USD ────── */}
+        {/* ────── Section: Market Overview ────── */}
+        <div className="flex items-center gap-3 pt-2">
+          <div className="h-px flex-1 bg-border-subtle" />
+          <span className="text-[10px] font-semibold text-text-muted/50 uppercase tracking-widest">Market Overview</span>
+          <div className="h-px flex-1 bg-border-subtle" />
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <div className="lg:col-span-2">
             <ScannerHeatmap
@@ -118,7 +126,13 @@ function App() {
           </div>
         </div>
 
-        {/* ────── Alerts + Calendar + Correlation ────── */}
+        {/* ────── Section: Intelligence ────── */}
+        <div className="flex items-center gap-3 pt-2">
+          <div className="h-px flex-1 bg-border-subtle" />
+          <span className="text-[10px] font-semibold text-text-muted/50 uppercase tracking-widest">Intelligence</span>
+          <div className="h-px flex-1 bg-border-subtle" />
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
           <AlertsPanel
             alerts={alerts}
@@ -129,14 +143,16 @@ function App() {
           <CorrelationMatrix />
         </div>
 
-        {/* ────── Live Trades ────── */}
-        <LiveTradesPanel livePrices={livePrices} wsSymbol={wsSymbol} switchSymbol={switchSymbol} />
-
         {/* ────── Journal ────── */}
         <JournalPanel />
 
         {/* ────── Pair Detail ────── */}
-        {data && (
+        {data && (<>
+          <div className="flex items-center gap-3 pt-2">
+            <div className="h-px flex-1 bg-border-subtle" />
+            <span className="text-[10px] font-semibold text-text-muted/50 uppercase tracking-widest">Pair Analysis</span>
+            <div className="h-px flex-1 bg-border-subtle" />
+          </div>
           <div className="fade-in space-y-5">
             {/* Top row: Bias + Levels + Checklist */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -161,33 +177,24 @@ function App() {
               levels={data.levels}
             />
 
-            {/* Risk Calculator */}
-            <div className="max-w-md">
-              <RiskCalculator pair={selectedPair} />
-            </div>
           </div>
-        )}
+        </>)}
 
         {/* Empty state */}
         {!data && !loading && !error && (
-          <div className="space-y-5">
-            <div className="glass rounded-2xl border border-border-subtle p-16 flex flex-col items-center justify-center text-center slide-up">
-              <div className="w-12 h-12 rounded-xl bg-accent/15 border border-accent/25 flex items-center justify-center mb-4">
-                <span className="text-accent-bright text-lg font-black">?</span>
-              </div>
-              <p className="text-text-secondary text-sm font-semibold mb-1">Select a pair and click "Fetch Bias"</p>
-              <p className="text-text-muted text-xs">Live data from Twelve Data API with multi-timeframe SMC analysis</p>
+          <div className="glass rounded-2xl border border-border-subtle p-16 flex flex-col items-center justify-center text-center slide-up">
+            <div className="w-12 h-12 rounded-xl bg-accent/15 border border-accent/25 flex items-center justify-center mb-4">
+              <span className="text-accent-bright text-lg font-black">?</span>
             </div>
-            <div className="max-w-md">
-              <RiskCalculator pair={selectedPair} />
-            </div>
+            <p className="text-text-secondary text-sm font-semibold mb-1">Select a pair and click "Fetch Bias"</p>
+            <p className="text-text-muted text-xs">Live data from Twelve Data API with multi-timeframe SMC analysis</p>
           </div>
         )}
 
         {/* Footer */}
         <footer className="text-center py-6 border-t border-border-subtle mt-4">
           <p className="text-[11px] text-text-muted/50 font-medium tracking-wider uppercase">
-            ICT Bias Dashboard &middot; Smart Money Concepts
+            MhN's Panel &middot; Forex Trading Dashboard
           </p>
         </footer>
       </main>
