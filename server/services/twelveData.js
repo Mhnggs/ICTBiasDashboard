@@ -153,6 +153,38 @@ function getCacheStatus() {
   return { entries: cache.size, active };
 }
 
+// Fast price cache — 15s TTL, only for /price endpoint.
+// Used by the live trade tracker to get near-realtime prices without
+// burning through the full candle/quote cache.
+const priceCache = new Map();
+const PRICE_CACHE_TTL = 15 * 1000;
+
+async function getRealTimePrice(symbol) {
+  const cached = priceCache.get(symbol);
+  if (cached && Date.now() - cached.ts < PRICE_CACHE_TTL) {
+    return cached.price;
+  }
+  try {
+    // Direct API call — bypasses the main 5-min cache
+    const now = Date.now();
+    const elapsed = now - lastCallTime;
+    if (elapsed < MIN_CALL_INTERVAL) {
+      await sleep(MIN_CALL_INTERVAL - elapsed);
+    }
+    lastCallTime = Date.now();
+    const response = await axios.get(`${BASE_URL}/price`, {
+      params: { symbol, apikey: API_KEY },
+      timeout: 5000,
+    });
+    const price = parseFloat(response.data?.price);
+    if (!isNaN(price)) {
+      priceCache.set(symbol, { price, ts: Date.now() });
+      return price;
+    }
+  } catch { /* fallback below */ }
+  return cached?.price ?? null;
+}
+
 module.exports = {
   fetchPairData,
   getPrice,
@@ -160,4 +192,5 @@ module.exports = {
   getATR,
   getDeepHistory,
   getCacheStatus,
+  getRealTimePrice,
 };

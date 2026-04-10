@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { fetchPairData, getCacheStatus, getATR } = require('../services/twelveData');
+const { fetchPairData, getCacheStatus, getATR, getRealTimePrice } = require('../services/twelveData');
 const { runAnalysis } = require('../services/analysis');
 const { getSessionInfo } = require('../services/session');
 const { computeStrength } = require('../services/strength');
@@ -238,13 +238,22 @@ router.get('/trades', (req, res) => {
 
 router.get('/trades/snapshot', async (req, res) => {
   try {
-    // Build price map + analysis map from cached data for smart exit suggestions
+    // Get real-time prices only for pairs with open trades (fast, 15s cache)
+    const openTrades = liveTrades.getOpenTrades();
+    const tradePairs = [...new Set(openTrades.map(t => t.pair))];
+
     const prices = {};
+    // Fetch real-time prices in parallel for open trade pairs
+    await Promise.all(tradePairs.map(async (pair) => {
+      const price = await getRealTimePrice(pair);
+      if (price != null) prices[pair] = price;
+    }));
+
+    // Analysis data from the heavier cache (for suggestions — ok if slightly stale)
     const analysisMap = {};
-    for (const pair of SUPPORTED_PAIRS) {
+    for (const pair of tradePairs) {
       try {
         const data = await fetchPairData(pair);
-        prices[pair] = data.currentPrice;
         const result = runAnalysis(
           pair, data.candles4H, data.candles1H, data.candles30m, data.candles15m,
           data.currentPrice,
@@ -252,8 +261,9 @@ router.get('/trades/snapshot', async (req, res) => {
           data.candles5m
         );
         analysisMap[pair] = { bias: result.bias, levels: result.levels, timeframes: result.timeframes };
-      } catch { /* skip pairs without cached data */ }
+      } catch { /* suggestions won't show if this fails — that's ok */ }
     }
+
     const snapshot = liveTrades.computeLiveSnapshot(prices, analysisMap);
     res.json({ trades: snapshot });
   } catch (err) {
