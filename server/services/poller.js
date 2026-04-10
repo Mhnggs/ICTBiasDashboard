@@ -1,27 +1,28 @@
-// Background poller: refreshes the scanner snapshot and currency strength on
-// a fixed interval and pushes the results to all connected WS clients via
-// priceStream. Keeps the server-side cache warm so REST endpoints stay fast.
+// Background poller: refreshes the scanner snapshot, currency strength, and
+// checks for upcoming high-impact news events.
 
 const { buildScannerSnapshot } = require('../routes/analysis');
 const { computeStrength } = require('./strength');
+const { fetchCalendar } = require('./economicCalendar');
 const { pushScanner, pushStrength, pushAlert } = require('./priceStream');
-const journal = require('./journal');
 
 // Track previous sweep state per pair so we only fire alerts on transitions.
-// Shape: { [pair]: { highSwept: bool, lowSwept: bool } }
 const sweepState = {};
+
+// Track which news events we've already alerted on (by title+datetime).
+const alertedNews = new Set();
 
 const SCANNER_INTERVAL_MS = 30 * 1000;        // 30s
 const STRENGTH_INTERVAL_MS = 60 * 1000;       // 60s
-const RESOLVER_INTERVAL_MS = 60 * 1000;       // 60s
-const FIRST_RUN_DELAY_MS = 2 * 1000;          // wait 2s after boot
+const NEWS_CHECK_INTERVAL_MS = 60 * 1000;     // 60s
+const FIRST_RUN_DELAY_MS = 2 * 1000;
 
 let scannerTimer = null;
 let strengthTimer = null;
-let resolverTimer = null;
+let newsTimer = null;
 let scannerRunning = false;
 let strengthRunning = false;
-let resolverRunning = false;
+let newsRunning = false;
 
 function detectSweepAlerts(snapshot) {
   for (const row of snapshot.results || []) {
@@ -32,7 +33,6 @@ function detectSweepAlerts(snapshot) {
       lowSwept: !!row.asian.lowSwept,
     };
 
-    // Only fire if we have a prior baseline (avoid alert on cold-start)
     if (prev) {
       if (!prev.highSwept && curr.highSwept) {
         const aligned = row.bias === 'BEARISH';
@@ -102,18 +102,47 @@ async function tickStrength() {
   }
 }
 
-async function tickResolver() {
-  if (resolverRunning) return;
-  resolverRunning = true;
+async function tickNews() {
+  if (newsRunning) return;
+  newsRunning = true;
   try {
-    const r = await journal.resolveOpenSignals();
-    if (r.resolved > 0) {
-      console.log(`[poller] journal resolved ${r.resolved}/${r.checked} open signals`);
+    const data = await fetchCalendar({ hoursAhead: 2, minImportance: 2 });
+    const now = Date.now();
+
+    for (const event of data.events || []) {
+      const minsUntil = (event.timestampMs - now) / 60000;
+      // Alert at ~30 min and ~5 min before
+      const windows = [
+        { min: 25, max: 35, label: '30 min' },
+        { min: 3, max: 7, label: '5 min' },
+      ];
+      for (const w of windows) {
+        if (minsUntil >= w.min && minsUntil <= w.max) {
+          const key = `${event.title}-${event.datetime}-${w.label}`;
+          if (alertedNews.has(key)) continue;
+          alertedNews.add(key);
+
+          const impLabel = event.importance >= 3 ? 'HIGH' : 'MEDIUM';
+          pushAlert({
+            id: `news-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            type: 'news',
+            importance: event.importance,
+            currency: event.currency,
+            title: event.title,
+            message: `${impLabel}-IMPACT: ${event.currency} ${event.title} in ~${w.label}`,
+            eventTime: event.datetime,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
     }
+
+    // Clean up old entries (older than 2h) to prevent memory growth
+    if (alertedNews.size > 200) alertedNews.clear();
   } catch (err) {
-    console.error('[poller] resolver error:', err.message);
+    console.error('[poller] news check error:', err.message);
   } finally {
-    resolverRunning = false;
+    newsRunning = false;
   }
 }
 
@@ -122,17 +151,17 @@ function start() {
   setTimeout(() => {
     tickScanner();
     tickStrength();
-    tickResolver();
+    tickNews();
     scannerTimer = setInterval(tickScanner, SCANNER_INTERVAL_MS);
     strengthTimer = setInterval(tickStrength, STRENGTH_INTERVAL_MS);
-    resolverTimer = setInterval(tickResolver, RESOLVER_INTERVAL_MS);
+    newsTimer = setInterval(tickNews, NEWS_CHECK_INTERVAL_MS);
   }, FIRST_RUN_DELAY_MS);
 }
 
 function stop() {
   clearInterval(scannerTimer);
   clearInterval(strengthTimer);
-  clearInterval(resolverTimer);
+  clearInterval(newsTimer);
 }
 
 module.exports = { start, stop };

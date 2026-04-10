@@ -1,6 +1,5 @@
 const WebSocket = require('ws');
 const { SUPPORTED_PAIRS } = require('../utils/helpers');
-const journal = require('./journal');
 
 const TD_WS_URL = 'wss://ws.twelvedata.com/v1/quotes/price';
 
@@ -36,9 +35,6 @@ function pushAlert(alert) {
   recentAlerts.unshift(alert);
   if (recentAlerts.length > MAX_ALERTS) recentAlerts.length = MAX_ALERTS;
   console.log(`[priceStream] ALERT: ${alert.message}`);
-  // Persist as a signal in the journal
-  try { journal.logAlertAsSignal(alert); }
-  catch (err) { console.error('[priceStream] journal log error:', err.message); }
   broadcast({ type: 'alert', alert });
 }
 

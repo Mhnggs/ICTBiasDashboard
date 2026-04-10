@@ -285,14 +285,42 @@ router.post('/trades', (req, res) => {
   }
 });
 
-router.post('/trades/:id/close', (req, res) => {
+router.post('/trades/:id/close', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     const { exit_price } = req.body;
     if (!exit_price) return res.status(400).json({ error: 'exit_price required' });
-    const result = liveTrades.closeTrade(id, parseFloat(exit_price));
-    if (!result) return res.status(404).json({ error: 'Trade not found or already closed' });
-    res.json(result);
+
+    // Fetch current analysis for the trade's pair to generate a detailed review
+    let analysisData = null;
+    const trade = liveTrades.getTradeById(id);
+    if (trade?.pair) {
+      try {
+        const data = await fetchPairData(trade.pair);
+        const result = runAnalysis(
+          trade.pair, data.candles4H, data.candles1H, data.candles30m, data.candles15m,
+          data.currentPrice,
+          { todayHigh: data.todayHigh, todayLow: data.todayLow, todayOpen: data.todayOpen },
+          data.candles5m
+        );
+        analysisData = { bias: result.bias, levels: result.levels, timeframes: result.timeframes };
+      } catch { /* close without analysis if fetch fails */ }
+    }
+
+    const closeResult = liveTrades.closeTrade(id, parseFloat(exit_price), analysisData);
+    if (!closeResult) return res.status(404).json({ error: 'Trade not found or already closed' });
+    res.json(closeResult);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/trades/:id', (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    const trade = liveTrades.getTradeById(id);
+    if (!trade) return res.status(404).json({ error: 'Trade not found' });
+    res.json(trade);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
